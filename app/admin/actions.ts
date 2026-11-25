@@ -181,7 +181,7 @@ export async function runSourceDiscovery() {
     }
     await sql`update sources set last_checked_at = now() where id = ${source.id}`;
   }
-  const unique = [...new Map(candidates.map(item => [item.url,item])).values()].slice(0,60);
+  const unique = [...new Map<string, FeedCandidate>(candidates.map(item => [item.url,item] as const)).values()].slice(0,60);
   let assessments: StoryAssessment[] | null = null;
   let aiError = "";
   if (process.env.OPENAI_API_KEY && unique.length) {
@@ -189,8 +189,8 @@ export async function runSourceDiscovery() {
     catch (error) { aiError = error instanceof Error ? error.message : "AI screening failed"; }
   }
   const desks = await sql`select id,slug from editorial_desks where is_active = true`;
-  const deskIds = new Map((desks as {id:string;slug:string}[]).map(desk => [desk.slug,desk.id]));
-  const assessmentByIndex = new Map((assessments || []).map(item => [item.index,item]));
+  const deskIds = new Map<string, string>((desks as {id:string;slug:string}[]).map(desk => [desk.slug,desk.id] as const));
+  const assessmentByIndex = new Map<number, StoryAssessment>((assessments || []).map(item => [item.index,item] as const));
   let imported = 0;
   let selected = 0;
   for (let index=0; index<unique.length; index++) {
