@@ -1,21 +1,14 @@
 "use server";
-import { getServerSession } from "next-auth";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { authOptions } from "@/lib/auth";
 import { getSql } from "@/lib/db";
 
-async function requireEditor() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) throw new Error("You must be signed in to use the newsroom.");
-}
 const value = (data: FormData, key: string) => {
   const item = data.get(key);
   return typeof item === "string" ? item.trim() : "";
 };
 
 export async function createSource(data: FormData) {
-  await requireEditor();
   const name = value(data, "name");
   const homepage = value(data, "homepage_url");
   const feed = value(data, "feed_url");
@@ -35,7 +28,6 @@ export async function createSource(data: FormData) {
 }
 
 export async function createStory(data: FormData) {
-  await requireEditor();
   const headline = value(data, "headline");
   const summary = value(data, "summary");
   const deskId = value(data, "desk_id");
@@ -56,7 +48,6 @@ export async function createStory(data: FormData) {
 }
 
 export async function createArticle(data: FormData) {
-  await requireEditor();
   const title = value(data, "title");
   const standfirst = value(data, "standfirst");
   const body = value(data, "body_markdown");
