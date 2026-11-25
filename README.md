@@ -38,41 +38,19 @@ The initial Neon PostgreSQL schema is in `database/schema.sql`, with setup instr
 The publication name is provisional pending proper trademark and brand clearance. Similar positive-news publication naming exists; domain availability alone is not legal clearance.
 
 
-## Private newsroom authentication
+## Newsroom access and authentication
 
-The private newsroom is served at `/admin` and uses GitHub OAuth through NextAuth. Sign-in is restricted to the GitHub login configured in `GITHUB_ALLOWED_USER` (default: `caseysmeekes`). Public registration is not enabled.
-
-### GitHub OAuth setup
-
-1. In GitHub, open **Settings → Developer settings → OAuth Apps → New OAuth App**.
-2. Set Application name to `Positive Press Global Newsroom`.
-3. Set Homepage URL to `https://positive-press-global.vercel.app`.
-4. Set Authorization callback URL to `https://positive-press-global.vercel.app/api/auth/callback/github`.
-5. Create the app and generate a client secret.
-
-Add these environment variables to the Vercel project for Production, Preview and Development:
-
-- `GITHUB_ID`: OAuth App client ID
-- `GITHUB_SECRET`: OAuth App client secret
-- `GITHUB_ALLOWED_USER`: `caseysmeekes`
-- `NEXTAUTH_URL`: `https://positive-press-global.vercel.app`
-- `NEXTAUTH_SECRET`: a newly generated random secret (for example, generate one with `openssl rand -base64 32`)
-
-The Neon integration has already added database variables. Keep `DATABASE_URL` server-side and never expose any of these secrets in client-side code or GitHub.
-
-After adding variables, redeploy the project. Visit `/login` to test GitHub sign-in and `/admin` to open the private newsroom.
-
-The dashboard reads aggregate counts from Neon. The next implementation step is CRUD for sources, discovered stories and articles, plus approval and publishing actions. Do not treat the dashboard shell as a finished CMS.
+The newsroom at `/admin` is temporarily accessible without login while the product is being built and tested. Authentication has deliberately been deferred until the end of the build. Do not add credentials or OAuth environment variables yet. Before any public launch, restore route and server-action protection, configure the chosen authentication provider, and verify access controls.
 
 
 ## Newsroom tools implemented
 
-The private admin workspace now includes:
+The admin workspace currently includes:
 - `/admin/sources`: register and view editorial sources, including homepage, feed URL, type, country and notes.
 - `/admin/stories`: manually capture story leads, assign an editorial desk, add an original source URL and set priority.
 - `/admin/articles`: list article drafts and their editorial status.
 - `/admin/articles/new`: create an unpublished article draft and store its first version in the version history.
 
-All create actions require a valid server-side editor session. The admin routes remain protected by middleware. GitHub OAuth configuration is deliberately deferred until the owner is ready to activate newsroom access. Do not remove the protection or expose the admin routes publicly.
+The newsroom is intentionally open during development. Do not treat this as production-safe: anyone who can reach the deployed site may be able to access the admin screens and create records. Keep the site private or use it only with non-sensitive test data until authentication is restored.
 
 The workflow currently supports manual source and story intake and draft creation. RSS ingestion, editing existing records, research automation, approvals and public publishing are subsequent implementation steps.
