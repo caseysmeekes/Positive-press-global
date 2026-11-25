@@ -164,13 +164,13 @@ async function extractSourceArticle(url: string): Promise<string> {
   if (!response.ok) throw new Error("Article page returned HTTP " + response.status);
   const html = (await response.text()).slice(0, 1000000);
   const text = html
-    .replace(/<(script|style|noscript|svg|nav|footer|header|aside|form)\\b[^>]*>[\\s\\S]*?<\\/\\1>/gi, " ")
-    .replace(/<(article|main|p|h1|h2|h3|li|blockquote)\\b[^>]*>/gi, "\\n")
-    .replace(/<\\/(article|main|p|h1|h2|h3|li|blockquote)>/gi, "\\n")
+    .replace(/<(script|style|noscript|svg|nav|footer|header|aside|form)\b[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<(article|main|p|h1|h2|h3|li|blockquote)\b[^>]*>/gi, "\n")
+    .replace(/<\/(article|main|p|h1|h2|h3|li|blockquote)>/gi, "\n")
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;|&#160;/gi, " ").replace(/&amp;/gi, "&").replace(/&quot;/gi, '"')
     .replace(/&#39;|&apos;/gi, "'").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">")
-    .replace(/\\s+/g, " ").trim();
+    .replace(/\s+/g, " ").trim();
   if (text.length < 400) throw new Error("The page did not expose enough readable article text.");
   return text.slice(0, 12000);
 }
