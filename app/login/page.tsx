@@ -1,5 +1,6 @@
-import "../admin/admin.css";
 "use client";
+
+import "../admin/admin.css";
 
 import { getProviders, signIn } from "next-auth/react";
 import { useEffect, useState } from "react";
