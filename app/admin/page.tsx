@@ -1,9 +1,5 @@
 import "./admin.css";
-import { getServerSession } from "next-auth";
-import { redirect } from "next/navigation";
-import { authOptions } from "@/lib/auth";
 import { getSql } from "@/lib/db";
-import { SignOutButton } from "@/components/sign-out";
 import { AdminNav } from "@/components/admin-nav";
 
 type Counts = { stories: number; drafts: number; review: number; published: number; sources: number };
@@ -28,8 +24,6 @@ async function getCounts(): Promise<Counts | null> {
 }
 
 export default async function AdminPage() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) redirect("/login");
   const counts = await getCounts();
   const metrics = [
     { label: "Story inbox", value: counts?.stories ?? "—", detail: "Stories in the pipeline" },
@@ -42,7 +36,7 @@ export default async function AdminPage() {
     <main className="newsroom">
       <header className="newsroom-header">
         <a className="newsroom-brand" href="/">THE POSITIVE PRESS <span>GLOBAL / NEWSROOM</span></a>
-        <div className="newsroom-user"><span>{session.user.name || session.user.githubLogin || "Editor"}</span><SignOutButton /></div>
+        <div className="newsroom-user">EDITORIAL WORKSPACE</div>
       </header>
       <AdminNav />
       <section className="newsroom-welcome">
