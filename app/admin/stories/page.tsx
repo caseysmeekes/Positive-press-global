@@ -3,6 +3,7 @@ import { getSql } from "@/lib/db";
 import { createStory, updateStoryTriage, runSourceDiscovery } from "../actions";
 import { AdminNav } from "@/components/admin-nav";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 export default async function StoriesPage({ searchParams }: { searchParams: Promise<{ saved?: string; updated?: string; scan?: string; checked?: string; fetched?: string; imported?: string; duplicates?: string; ai?: string; errors?: string }> }) {
   const params = await searchParams;
