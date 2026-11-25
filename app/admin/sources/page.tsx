@@ -1,20 +1,15 @@
 import "../admin.css";
-import { getServerSession } from "next-auth";
-import { redirect } from "next/navigation";
-import { authOptions } from "@/lib/auth";
 import { getSql } from "@/lib/db";
 import { createSource } from "../actions";
 import { AdminNav } from "@/components/admin-nav";
 export const dynamic = "force-dynamic";
 
 export default async function SourcesPage({ searchParams }: { searchParams: Promise<{ saved?: string }> }) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) redirect("/login");
   const params = await searchParams;
   const sql = getSql();
   const sources = await sql`select id, name, homepage_url, source_type, country_code, is_active from sources order by name asc`;
   return <main className="newsroom">
-    <header className="newsroom-header"><a className="newsroom-brand" href="/">THE POSITIVE PRESS <span>GLOBAL / NEWSROOM</span></a><span className="newsroom-user">{session.user.name || "Editor"}</span></header>
+    <header className="newsroom-header"><a className="newsroom-brand" href="/">THE POSITIVE PRESS <span>GLOBAL / NEWSROOM</span></a><span className="newsroom-user">EDITORIAL WORKSPACE</span></header>
     <AdminNav />
     <section className="admin-content">
       <p className="newsroom-kicker">RESEARCH INFRASTRUCTURE</p><h1 className="admin-page-title">Source register.</h1>
