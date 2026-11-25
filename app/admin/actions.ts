@@ -213,6 +213,7 @@ export async function runSourceDiscovery() {
   const assessmentByIndex = new Map<number, StoryAssessment>((assessments || []).map(item => [item.index,item] as const));
   let imported = 0;
   let selected = 0;
+  let extracted = 0;
   for (let index=0; index<unique.length; index++) {
     const item = unique[index];
     const assessment = assessmentByIndex.get(index);
