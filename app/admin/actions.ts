@@ -210,7 +210,7 @@ async function extractSourceArticle(url: string): Promise<string> {
   if (text.length < 400) throw new Error("The page did not expose enough readable article text.");
   return text.slice(0, 12000);
 }
-export async function runSourceDiscovery() {
+export async function runSourceDiscoveryCore() {
   const sql = getSql();
   const sources = await sql`select id, name, feed_url, source_type from sources where is_active = true and feed_url is not null and trim(feed_url) <> '' order by name limit 50`;
   const run = await sql`insert into workflow_runs (workflow_type,status,started_at,metadata) values ('source_fetch','running',now(),jsonb_build_object('source_count',${sources.length}::int)) returning id`;
@@ -299,9 +299,14 @@ export async function runSourceDiscovery() {
   await sql`insert into workflow_runs (workflow_type,status,started_at,completed_at,items_processed,metadata)
     values ('story_discovery',${assessments ? "succeeded" : "failed"},now(),now(),${selected},
     jsonb_build_object('screened',${unique.length}::int,'selected',${selected}::int,'ai_enabled',${Boolean(assessments)}::boolean,'error',${aiError || (process.env.OPENAI_API_KEY ? "" : "OPENAI_API_KEY is not configured")}::text))`;
+  return { checked, fetched, imported, duplicates, aiEnabled: Boolean(assessments), feedErrors: errors.length, extracted, draftsCreated, draftErrors: draftErrors.length };
+}
+
+export async function runSourceDiscovery() {
+  const result = await runSourceDiscoveryCore();
   revalidatePath("/admin");
   revalidatePath("/admin/stories");
-  redirect("/admin/stories?scan=1&checked="+checked+"&fetched="+fetched+"&imported="+imported+"&duplicates="+duplicates+"&ai="+(assessments ? "on" : "off")+"&errors="+errors.length+"&extracted="+extracted+"&drafts="+draftsCreated+"&draftErrors="+draftErrors.length);
+  redirect("/admin/stories?scan=1&checked="+result.checked+"&fetched="+result.fetched+"&imported="+result.imported+"&duplicates="+result.duplicates+"&ai="+(result.aiEnabled ? "on" : "off")+"&errors="+result.feedErrors+"&extracted="+result.extracted+"&drafts="+result.draftsCreated+"&draftErrors="+result.draftErrors);
 }
 
 export async function seedStarterSources() {
