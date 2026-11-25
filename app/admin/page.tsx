@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import { getSql } from "@/lib/db";
 import { SignOutButton } from "@/components/sign-out";
+import { AdminNav } from "@/components/admin-nav";
 
 type Counts = { stories: number; drafts: number; review: number; published: number; sources: number };
 export const dynamic = "force-dynamic";
@@ -43,6 +44,7 @@ export default async function AdminPage() {
         <a className="newsroom-brand" href="/">THE POSITIVE PRESS <span>GLOBAL / NEWSROOM</span></a>
         <div className="newsroom-user"><span>{session.user.name || session.user.githubLogin || "Editor"}</span><SignOutButton /></div>
       </header>
+      <AdminNav />
       <section className="newsroom-welcome">
         <p className="newsroom-kicker">EDITORIAL WORKSPACE / PRIVATE</p>
         <h1>Your newsroom.</h1>
@@ -68,7 +70,7 @@ export default async function AdminPage() {
         <aside className="newsroom-panel newsroom-side">
           <p className="newsroom-kicker">SOURCE REGISTER</p><h2>Research starts here.</h2>
           <strong className="source-count">{counts?.sources ?? "—"}</strong>
-          <p>Active sources registered</p><span className="coming-soon-tag">SOURCE MANAGEMENT NEXT</span>
+          <p>Active sources registered</p><a className="admin-primary admin-button-link" href="/admin/sources">Manage sources →</a>
         </aside>
       </section>
       <footer className="newsroom-footer"><a href="/">← View public publication</a><span>THE POSITIVE PRESS GLOBAL · EDITORIAL WORKSPACE</span></footer>
