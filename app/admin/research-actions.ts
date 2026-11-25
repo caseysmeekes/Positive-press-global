@@ -96,6 +96,7 @@ export async function researchAndDraftStory(data: FormData) {
     revalidatePath("/admin/articles");
     redirect("/admin/articles?generated=1");
   } catch (error) {
+    if (error && typeof error === "object" && "digest" in error && String((error as {digest?:unknown}).digest).startsWith("NEXT_REDIRECT")) throw error;
     await sql`update workflow_runs set status='failed',completed_at=now(),error_message=${error instanceof Error ? error.message : "Research and drafting failed"} where id=${(run[0] as {id:string}).id}`;
     throw error;
   }
