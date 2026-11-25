@@ -76,7 +76,7 @@ All AI-powered story screening, manual research and overnight article drafting u
 Add these Production (and Preview, if you test previews) environment variables in Vercel:
 
 - `GEMINI_API_KEY`: create an API key in [Google AI Studio](https://aistudio.google.com/api-keys).
-- `GEMINI_MODEL` (optional): defaults to `gemini-2.5-flash`.
+- `GEMINI_MODEL` (optional): defaults to `gemini-3.8-flash`.
 
 The Google AI Plus consumer subscription does not itself supply this API key. Gemini API access and billing/quotas are managed separately in Google AI Studio. Once the Gemini deployment is working, the old `OPENAI_API_KEY` variable is no longer used by this application and can be removed from Vercel.
 
