@@ -1,19 +1,14 @@
 import "../admin.css";
-import { getServerSession } from "next-auth";
-import { redirect } from "next/navigation";
-import { authOptions } from "@/lib/auth";
 import { getSql } from "@/lib/db";
 import { AdminNav } from "@/components/admin-nav";
 export const dynamic = "force-dynamic";
 
 export default async function ArticlesPage({ searchParams }: { searchParams: Promise<{ saved?: string }> }) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) redirect("/login");
   const params = await searchParams;
   const sql = getSql();
   const articles = await sql`select a.id, a.title, a.slug, a.status, a.article_type, d.name as desk_name from articles a join editorial_desks d on d.id = a.desk_id order by a.updated_at desc limit 100`;
   return <main className="newsroom">
-    <header className="newsroom-header"><a className="newsroom-brand" href="/">THE POSITIVE PRESS <span>GLOBAL / NEWSROOM</span></a><span className="newsroom-user">{session.user.name || "Editor"}</span></header>
+    <header className="newsroom-header"><a className="newsroom-brand" href="/">THE POSITIVE PRESS <span>GLOBAL / NEWSROOM</span></a><span className="newsroom-user">EDITORIAL WORKSPACE</span></header>
     <AdminNav />
     <section className="admin-content">
       <p className="newsroom-kicker">EDITORIAL CONTENT</p><h1 className="admin-page-title">Articles.</h1>
