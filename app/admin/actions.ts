@@ -154,6 +154,42 @@ async function screenStories(items: FeedCandidate[]): Promise<StoryAssessment[] 
   return parsed.assessments;
 }
 
+async function createOvernightDraft(storyId: string): Promise<boolean> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return false;
+  const sql = getSql();
+  const rows = await sql`select s.id,s.headline,s.summary,s.canonical_url,s.desk_id,d.name as desk_name from discovered_stories s left join editorial_desks d on d.id=s.desk_id where s.id=${storyId} limit 1`;
+  if (!rows.length) return false;
+  const story = rows[0] as {id:string;headline:string;summary:string|null;canonical_url:string|null;desk_id:string|null;desk_name:string|null};
+  if (!story.desk_id) return false;
+  const sources = await sql`select url,title,publisher,source_role,notes from story_sources where story_id=${storyId} order by created_at asc limit 8`;
+  const sourceMaterial = (sources as {url:string;title:string|null;publisher:string|null;source_role:string;notes:string|null}[]).map(source => ({url:source.url,title:source.title,publisher:source.publisher,role:source.source_role,extracted_text:source.notes || ""}));
+  const usable = sourceMaterial.filter(source => source.extracted_text.includes("EXTRACTED SOURCE TEXT:"));
+  if (!usable.length) return false;
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method:"POST", headers:{Authorization:"Bearer "+apiKey,"Content-Type":"application/json"},
+    body:JSON.stringify({model:process.env.OPENAI_MODEL || "gpt-4o-mini",temperature:0.3,response_format:{type:"json_object"},
+      messages:[
+        {role:"system",content:"You are the commissioning editor and original writer for The Positive Press Global. Create a genuinely original, accurate, readable article draft from the supplied source text. Do not reproduce or closely paraphrase source wording, structure, distinctive turns of phrase or quotations. Do not invent facts, people, dates, statistics, outcomes or quotes. Use direct quotes only when they are present in the supplied text and clearly attributed, otherwise paraphrase facts in fresh language. Distinguish reported facts from interpretation. If evidence is thin, write a shorter cautious draft rather than padding. Do not claim independent verification. Add a short editor's verification checklist. Return valid JSON only."},
+        {role:"user",content:JSON.stringify({story:{headline:story.headline,summary:story.summary,desk:story.desk_name},sources:usable,required_output:{headline:"string",standfirst:"string",article_markdown:"string",seo_description:"string",research_summary:"string",claims_to_verify:["string"],source_assessment:"string"}})}
+      ]}),signal:AbortSignal.timeout(50000)
+  });
+  if (!response.ok) throw new Error("OpenAI draft request returned HTTP "+response.status);
+  const payload = await response.json() as {choices?:{message?:{content?:string}}[]};
+  const raw = payload.choices?.[0]?.message?.content;
+  if (!raw) throw new Error("AI returned an empty overnight draft.");
+  const draft = JSON.parse(raw) as {headline?:string;standfirst?:string;article_markdown?:string;seo_description?:string;research_summary?:string;claims_to_verify?:string[];source_assessment?:string};
+  if (!draft.headline || !draft.article_markdown || draft.article_markdown.length < 500) throw new Error("AI draft was incomplete or too short.");
+  const links = usable.map(source=>"- ["+(source.publisher || source.title || "Source")+"]("+source.url+")").join("\\n");
+  const body = draft.article_markdown+"\\n\\n## Sources\\n"+links+"\\n\\n## Editor's verification checklist\\n"+(draft.claims_to_verify || []).map(item=>"- "+item).join("\\n")+"\\n\\n*AI-assisted working draft. Not independently fact-checked. Human editorial approval is required before publication.*";
+  const slugBase = draft.headline.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,70) || "article";
+  const slug = slugBase+"-"+crypto.randomUUID().slice(0,8);
+  const created = await sql`with a as (insert into articles (story_id,desk_id,title,slug,standfirst,body_markdown,seo_description,article_type,status,is_ai_assisted,human_review_required) values (${storyId},${story.desk_id},${draft.headline.slice(0,180)},${slug},${(draft.standfirst || "").slice(0,400)},${body},${(draft.seo_description || "").slice(0,300)},'feature','draft',true,true) returning id,title,standfirst,body_markdown) insert into article_versions (article_id,version_number,title,standfirst,body_markdown,change_summary) select id,1,title,standfirst,body_markdown,'Overnight AI-assisted draft from extracted source text' from a returning article_id`;
+  await sql`update discovered_stories set status='drafted',internal_notes=concat_ws(E'\\n\\n',internal_notes,${"OVERNIGHT AI DRAFT RESEARCH: "+(draft.research_summary || "")+"\\nSource assessment: "+(draft.source_assessment || "Not supplied")}) where id=${storyId}`;
+  await sql`insert into workflow_runs (workflow_type,status,started_at,completed_at,items_processed,metadata) values ('drafting','succeeded',now(),now(),1,jsonb_build_object('story_id',${storyId}::text,'article_id',${(created[0] as {article_id:string}).article_id}::text,'mode','overnight'))`;
+  await sql`insert into editorial_audit_log (entity_type,entity_id,action,details) values ('story',${storyId},'overnight_ai_draft_created',jsonb_build_object('article_id',${(created[0] as {article_id:string}).article_id}::text))`;
+  return true;
+}
 async function extractSourceArticle(url: string): Promise<string> {
   const parsed = new URL(url);
   if (parsed.protocol !== "https:" || !parsed.hostname || parsed.username || parsed.password) throw new Error("Only public HTTPS article pages are supported.");
@@ -214,6 +250,8 @@ export async function runSourceDiscovery() {
   let imported = 0;
   let selected = 0;
   let extracted = 0;
+  let draftsCreated = 0;
+  const draftErrors: string[] = [];
   for (let index=0; index<unique.length; index++) {
     const item = unique[index];
     const assessment = assessmentByIndex.get(index);
@@ -250,16 +288,20 @@ export async function runSourceDiscovery() {
       on conflict (story_id,url) do update set notes=excluded.notes`;
     imported++;
     if (assessment) selected++;
+    if (extractedText && process.env.OPENAI_API_KEY) {
+      try { if (await createOvernightDraft(storyId)) draftsCreated++; }
+      catch (error) { draftErrors.push(item.title + ": " + (error instanceof Error ? error.message : "Draft creation failed")); }
+    }
   }
   await sql`update workflow_runs set status='succeeded',completed_at=now(),items_processed=${imported},
-    metadata=jsonb_build_object('sources_checked',${checked}::int,'items_fetched',${fetched}::int,'new_stories',${imported}::int,'duplicates',${duplicates}::int,'ai_screened',${Boolean(assessments)}::boolean,'ai_error',${aiError}::text,'feed_errors',${JSON.stringify(errors.slice(0,10))}::jsonb)
+    metadata=jsonb_build_object('sources_checked',${checked}::int,'items_fetched',${fetched}::int,'new_stories',${imported}::int,'duplicates',${duplicates}::int,'drafts_created',${draftsCreated}::int,'draft_errors',${JSON.stringify(draftErrors.slice(0,8))}::jsonb,'ai_screened',${Boolean(assessments)}::boolean,'ai_error',${aiError}::text,'feed_errors',${JSON.stringify(errors.slice(0,10))}::jsonb)
     where id=${(run[0] as {id:string}).id}`;
   await sql`insert into workflow_runs (workflow_type,status,started_at,completed_at,items_processed,metadata)
     values ('story_discovery',${assessments ? "succeeded" : "failed"},now(),now(),${selected},
     jsonb_build_object('screened',${unique.length}::int,'selected',${selected}::int,'ai_enabled',${Boolean(assessments)}::boolean,'error',${aiError || (process.env.OPENAI_API_KEY ? "" : "OPENAI_API_KEY is not configured")}::text))`;
   revalidatePath("/admin");
   revalidatePath("/admin/stories");
-  redirect("/admin/stories?scan=1&checked="+checked+"&fetched="+fetched+"&imported="+imported+"&duplicates="+duplicates+"&ai="+(assessments ? "on" : "off")+"&errors="+errors.length+"&extracted="+extracted);
+  redirect("/admin/stories?scan=1&checked="+checked+"&fetched="+fetched+"&imported="+imported+"&duplicates="+duplicates+"&ai="+(assessments ? "on" : "off")+"&errors="+errors.length+"&extracted="+extracted+"&drafts="+draftsCreated+"&draftErrors="+draftErrors.length);
 }
 
 export async function seedStarterSources() {
