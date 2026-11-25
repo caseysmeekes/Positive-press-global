@@ -4,7 +4,6 @@ type JsonGenerationOptions = {
   systemInstruction: string;
   prompt: string;
   temperature?: number;
-  timeoutMs?: number;
 };
 
 export async function generateGeminiJson<T>(options: JsonGenerationOptions): Promise<T> {
