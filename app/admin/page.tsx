@@ -41,8 +41,8 @@ export default async function AdminPage() {
       <AdminNav />
       <section className="newsroom-welcome">
         <p className="newsroom-kicker">EDITORIAL WORKSPACE / PRIVATE</p>
-        <h1>Your newsroom.</h1>
-        <p>Good journalism starts with good research. This is where stories move from discovery to editorial review and publication.</p>
+        <h1>Story triage newsroom.</h1>
+        <p>Review incoming story leads, check their sources, set priorities and decide what moves into research.</p>
       </section>
       {!counts && <div className="newsroom-alert">The database connection needs attention. Check DATABASE_URL in Vercel and confirm the Phase 2 schema has been applied in Neon.</div>}
       <section className="newsroom-metrics" aria-label="Newsroom overview">
