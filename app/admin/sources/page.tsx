@@ -14,12 +14,18 @@ export default async function SourcesPage({ searchParams }: { searchParams: Prom
     <section className="admin-content">
       <p className="newsroom-kicker">RESEARCH INFRASTRUCTURE</p><h1 className="admin-page-title">Source register.</h1>
       <p className="admin-page-intro">Maintain publications, official bodies, research organisations and other newsroom sources.</p>
-      {params.saved && <p className="admin-success">Source saved.</p>}{params.seeded && <p className="admin-success">Starter source set processed: {params.added || "0"} added, {params.existing || "0"} already registered.</p>}
+      {params.saved && <p className="admin-success">Source saved.</p>}{params.seeded && <p className="admin-success">Starter sources processed: {params.added || "0"} added, {params.existing || "0"} already registered.</p>}{params.seeded && <p className="admin-success">Starter source set processed: {params.added || "0"} added, {params.existing || "0"} already registered.</p>}
       <section className="newsroom-panel starter-source-panel">
         <div className="starter-source-heading"><div><p className="newsroom-kicker">STARTER SOURCE LIBRARY</p><h2>30 curated global sources</h2><p>Positive journalism, science, conservation, international coverage, culture, technology, sport and aviation. Existing sources are left untouched.</p></div>
           <form action={seedStarterSources}><button className="admin-primary" type="submit">Add 30 starter sources →</button></form>
         </div>
         <p className="starter-source-note">This adds active sources and their RSS / Atom feed URLs. Feeds are used to discover story leads, not to republish source articles. Check each publisher’s terms before using excerpts, images or other content.</p>
+      </section>
+      <section className="newsroom-panel starter-source-panel">
+        <div className="starter-source-heading"><div><p className="newsroom-kicker">STARTER SOURCE LIBRARY</p><h2>30 curated global sources</h2><p>Positive journalism, science, conservation, international coverage, culture, technology, sport and aviation.</p></div>
+          <form action={seedStarterSources}><button className="admin-primary" type="submit">Add 30 starter sources →</button></form>
+        </div>
+        <p className="starter-source-note">Adds active sources with RSS or Atom feed URLs. Feeds are for discovering story leads, not republishing articles. Check each publisher’s terms before using excerpts, images or other content.</p>
       </section>
       <div className="admin-two-col">
         <section className="newsroom-panel"><p className="newsroom-kicker">ADD A SOURCE</p><h2>Register a source</h2>
