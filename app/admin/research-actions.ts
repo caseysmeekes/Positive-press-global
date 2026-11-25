@@ -2,6 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSql } from "@/lib/db";
+import { generateGeminiJson } from "@/lib/gemini";
 
 const formValue = (data: FormData, key: string) => {
   const v = data.get(key);
@@ -10,9 +11,8 @@ const formValue = (data: FormData, key: string) => {
 
 export async function researchAndDraftStory(data: FormData) {
   const storyId = formValue(data, "story_id");
-  const apiKey = process.env.OPENAI_API_KEY;
   if (!storyId) throw new Error("Story ID is required.");
-  if (!apiKey) throw new Error("OPENAI_API_KEY is missing from this deployment.");
+  if (!(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)) throw new Error("GEMINI_API_KEY is missing from this deployment.");
 
   const sql = getSql();
   const rows = await sql`select s.id,s.headline,s.summary,s.canonical_url,s.desk_id,d.name as desk_name
@@ -33,33 +33,19 @@ export async function researchAndDraftStory(data: FormData) {
   const run = await sql`insert into workflow_runs (workflow_type,status,started_at,metadata)
     values ('research','running',now(),jsonb_build_object('story_id',${storyId}::text,'source_count',${sourceMaterial.length}::int)) returning id`;
   try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method:"POST",
-      headers:{Authorization:"Bearer "+apiKey,"Content-Type":"application/json"},
-      body:JSON.stringify({
-        model:process.env.OPENAI_MODEL || "gpt-4o-mini",
-        temperature:0.25,
-        response_format:{type:"json_object"},
-        messages:[
-          {role:"system",content:"You are the research editor and feature writer for The Positive Press Global. Produce an original, careful article draft and an editorial research pack using only the supplied information. You cannot browse or independently verify facts. Never invent details, quotes, statistics, dates, names or corroboration. Clearly label all unsupported or single-source claims as needing verification. Do not closely paraphrase source notes. Return valid JSON only."},
-          {role:"user",content:JSON.stringify({
-            story:{headline:story.headline,summary:story.summary,desk:story.desk_name,original_url:story.canonical_url},
-            source_material:sourceMaterial,
-            output:{research_summary:"string",key_facts:["string"],claims_to_verify:["string"],missing_perspectives:["string"],source_assessment:"string",headline:"string",standfirst:"string",article_markdown:"string",seo_description:"string"}
-          })}
-        ]
-      }),
-      signal:AbortSignal.timeout(55000)
-    });
-    if (!response.ok) throw new Error("OpenAI API returned HTTP "+response.status+".");
-    const result = await response.json() as {choices?:{message?:{content?:string}}[]};
-    const raw = result.choices?.[0]?.message?.content;
-    if (!raw) throw new Error("The AI returned an empty response.");
-    const draft = JSON.parse(raw) as {
+    const draft = await generateGeminiJson<{
       research_summary?:string;key_facts?:string[];claims_to_verify?:string[];
       missing_perspectives?:string[];source_assessment?:string;headline?:string;
       standfirst?:string;article_markdown?:string;seo_description?:string
-    };
+    }>({
+      systemInstruction: "You are the research editor and feature writer for The Positive Press Global. Produce an original, careful article draft and an editorial research pack using only the supplied information. You cannot browse or independently verify facts. Never invent details, quotes, statistics, dates, names or corroboration. Clearly label all unsupported or single-source claims as needing verification. Do not closely paraphrase source notes. Return valid JSON only.",
+      prompt: JSON.stringify({
+        story:{headline:story.headline,summary:story.summary,desk:story.desk_name,original_url:story.canonical_url},
+        source_material:sourceMaterial,
+        output:{research_summary:"string",key_facts:["string"],claims_to_verify:["string"],missing_perspectives:["string"],source_assessment:"string",headline:"string",standfirst:"string",article_markdown:"string",seo_description:"string"}
+      }),
+      temperature: 0.25
+    });
     if (!draft.headline || !draft.article_markdown) throw new Error("The AI response did not include a complete article draft.");
 
     const pack = [
