@@ -2,6 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSql } from "@/lib/db";
+import { generateGeminiJson } from "@/lib/gemini";
 
 const value = (data: FormData, key: string) => {
   const item = data.get(key);
@@ -131,34 +132,18 @@ function validateFeedUrl(value: string): string {
   return url.toString();
 }
 async function screenStories(items: FeedCandidate[]): Promise<StoryAssessment[] | null> {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key || !items.length) return null;
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: "Bearer " + key, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: process.env.OPENAI_MODEL || "gpt-4o-mini",
-      temperature: 0.1,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: "You screen story leads for The Positive Press Global. Prioritise constructive positive global stories, solutions, conservation, science, communities and culture. Also retain strong specialist stories about aviation and aerospace, sport and officiating, and technology. Reject routine promotions, thin press releases, clickbait, gossip and low-public-interest items. Never invent facts. Return JSON {assessments:[...]}. For each input index return include boolean, desk slug, positivity 1-5, relevance 1-5, priority 1-5 and one cautious summary sentence. Allowed desk slugs: good-news, planet-positive, people-places, science-discovery, food-culture, aviation-aerospace, sport-officiating, technology-innovation." },
-        { role: "user", content: JSON.stringify({ items: items.map((item,index) => ({ index, headline:item.title, publisher:item.sourceName, sourceType:item.sourceType, summary:item.summary.slice(0,800), url:item.url })) }) }
-      ]
-    }),
-    signal: AbortSignal.timeout(25000)
+  if (!items.length) return null;
+  const parsed = await generateGeminiJson<{ assessments?: StoryAssessment[] }>({
+    systemInstruction: "You screen story leads for The Positive Press Global. Prioritise constructive positive global stories, solutions, conservation, science, communities and culture. Also retain strong specialist stories about aviation and aerospace, sport and officiating, and technology. Reject routine promotions, thin press releases, clickbait, gossip and low-public-interest items. Never invent facts. Return JSON {assessments:[...]}. For each input index return include boolean, desk slug, positivity 1-5, relevance 1-5, priority 1-5 and one cautious summary sentence. Allowed desk slugs: good-news, planet-positive, people-places, science-discovery, food-culture, aviation-aerospace, sport-officiating, technology-innovation.",
+    prompt: JSON.stringify({ items: items.map((item,index) => ({ index, headline:item.title, publisher:item.sourceName, sourceType:item.sourceType, summary:item.summary.slice(0,800), url:item.url })) }),
+    temperature: 0.1
   });
-  if (!response.ok) throw new Error("AI screening returned HTTP " + response.status);
-  const result = await response.json() as { choices?: { message?: { content?: string } }[] };
-  const content = result.choices?.[0]?.message?.content;
-  if (!content) throw new Error("AI screening returned an empty response.");
-  const parsed = JSON.parse(content) as { assessments?: StoryAssessment[] };
-  if (!Array.isArray(parsed.assessments)) throw new Error("AI screening response was not in the expected format.");
+  if (!Array.isArray(parsed.assessments)) throw new Error("Gemini screening response was not in the expected format.");
   return parsed.assessments;
 }
 
 async function createOvernightDraft(storyId: string): Promise<boolean> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return false;
+  if (!(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)) return false;
   const sql = getSql();
   const rows = await sql`select s.id,s.headline,s.summary,s.canonical_url,s.desk_id,d.name as desk_name from discovered_stories s left join editorial_desks d on d.id=s.desk_id where s.id=${storyId} limit 1`;
   if (!rows.length) return false;
@@ -168,19 +153,11 @@ async function createOvernightDraft(storyId: string): Promise<boolean> {
   const sourceMaterial = (sources as {url:string;title:string|null;publisher:string|null;source_role:string;notes:string|null}[]).map(source => ({url:source.url,title:source.title,publisher:source.publisher,role:source.source_role,extracted_text:source.notes || ""}));
   const usable = sourceMaterial.filter(source => source.extracted_text.includes("EXTRACTED SOURCE TEXT (up to 12,000 characters):"));
   if (!usable.length) return false;
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method:"POST", headers:{Authorization:"Bearer "+apiKey,"Content-Type":"application/json"},
-    body:JSON.stringify({model:process.env.OPENAI_MODEL || "gpt-4o-mini",temperature:0.3,response_format:{type:"json_object"},
-      messages:[
-        {role:"system",content:"You are the commissioning editor and original writer for The Positive Press Global. Create a genuinely original, accurate, readable article draft from the supplied source text. Do not reproduce or closely paraphrase source wording, structure, distinctive turns of phrase or quotations. Do not invent facts, people, dates, statistics, outcomes or quotes. Use direct quotes only when they are present in the supplied text and clearly attributed, otherwise paraphrase facts in fresh language. Distinguish reported facts from interpretation. If evidence is thin, write a shorter cautious draft rather than padding. Do not claim independent verification. Add a short editor's verification checklist. Return valid JSON only."},
-        {role:"user",content:JSON.stringify({story:{headline:story.headline,summary:story.summary,desk:story.desk_name},sources:usable,required_output:{headline:"string",standfirst:"string",article_markdown:"string",seo_description:"string",research_summary:"string",claims_to_verify:["string"],source_assessment:"string"}})}
-      ]}),signal:AbortSignal.timeout(50000)
+  const draft = await generateGeminiJson<{headline?:string;standfirst?:string;article_markdown?:string;seo_description?:string;research_summary?:string;claims_to_verify?:string[];source_assessment?:string}>({
+    systemInstruction: "You are the commissioning editor and original writer for The Positive Press Global. Create a genuinely original, accurate, readable article draft from the supplied source text. Do not reproduce or closely paraphrase source wording, structure, distinctive turns of phrase or quotations. Do not invent facts, people, dates, statistics, outcomes or quotes. Use direct quotes only when they are present in the supplied text and clearly attributed, otherwise paraphrase facts in fresh language. Distinguish reported facts from interpretation. If evidence is thin, write a shorter cautious draft rather than padding. Do not claim independent verification. Add a short editor's verification checklist. Return valid JSON only.",
+    prompt: JSON.stringify({story:{headline:story.headline,summary:story.summary,desk:story.desk_name},sources:usable,required_output:{headline:"string",standfirst:"string",article_markdown:"string",seo_description:"string",research_summary:"string",claims_to_verify:["string"],source_assessment:"string"}}),
+    temperature: 0.3
   });
-  if (!response.ok) throw new Error("OpenAI draft request returned HTTP "+response.status);
-  const payload = await response.json() as {choices?:{message?:{content?:string}}[]};
-  const raw = payload.choices?.[0]?.message?.content;
-  if (!raw) throw new Error("AI returned an empty overnight draft.");
-  const draft = JSON.parse(raw) as {headline?:string;standfirst?:string;article_markdown?:string;seo_description?:string;research_summary?:string;claims_to_verify?:string[];source_assessment?:string};
   if (!draft.headline || !draft.article_markdown || draft.article_markdown.length < 500) throw new Error("AI draft was incomplete or too short.");
   const links = usable.map(source=>"- ["+(source.publisher || source.title || "Source")+"]("+source.url+")").join("\n");
   const body = draft.article_markdown+"\n\n## Sources\n"+links+"\n\n## Editor's verification checklist\n"+(draft.claims_to_verify || []).map(item=>"- "+item).join("\n")+"\n\n*AI-assisted working draft. Not independently fact-checked. Human editorial approval is required before publication.*";
@@ -242,7 +219,7 @@ export async function runSourceDiscoveryCore() {
   const unique = [...new Map<string, FeedCandidate>(candidates.map(item => [item.url,item] as const)).values()].slice(0,60);
   let assessments: StoryAssessment[] | null = null;
   let aiError = "";
-  if (process.env.OPENAI_API_KEY && unique.length) {
+  if ((process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) && unique.length) {
     try { assessments = await screenStories(unique); }
     catch (error) { aiError = error instanceof Error ? error.message : "AI screening failed"; }
   }
@@ -290,7 +267,7 @@ export async function runSourceDiscoveryCore() {
       on conflict (story_id,url) do update set notes=excluded.notes`;
     imported++;
     if (assessment) selected++;
-    if (extractedText && process.env.OPENAI_API_KEY) {
+    if (extractedText && (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)) {
       try { if (await createOvernightDraft(storyId)) draftsCreated++; }
       catch (error) { draftErrors.push(item.title + ": " + (error instanceof Error ? error.message : "Draft creation failed")); }
     }
@@ -300,7 +277,7 @@ export async function runSourceDiscoveryCore() {
     where id=${(run[0] as {id:string}).id}`;
   await sql`insert into workflow_runs (workflow_type,status,started_at,completed_at,items_processed,metadata)
     values ('story_discovery',${assessments ? "succeeded" : "failed"},now(),now(),${selected},
-    jsonb_build_object('screened',${unique.length}::int,'selected',${selected}::int,'ai_enabled',${Boolean(assessments)}::boolean,'error',${aiError || (process.env.OPENAI_API_KEY ? "" : "OPENAI_API_KEY is not configured")}::text))`;
+    jsonb_build_object('screened',${unique.length}::int,'selected',${selected}::int,'ai_enabled',${Boolean(assessments)}::boolean,'error',${aiError || ((process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) ? "" : "GEMINI_API_KEY is not configured")}::text))`;
   return { checked, fetched, imported, duplicates, aiEnabled: Boolean(assessments), feedErrors: errors.length, extracted, draftsCreated, draftErrors: draftErrors.length };
 }
 
