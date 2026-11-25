@@ -164,7 +164,7 @@ async function createOvernightDraft(storyId: string): Promise<boolean> {
   if (!story.desk_id) return false;
   const sources = await sql`select url,title,publisher,source_role,notes from story_sources where story_id=${storyId} order by created_at asc limit 8`;
   const sourceMaterial = (sources as {url:string;title:string|null;publisher:string|null;source_role:string;notes:string|null}[]).map(source => ({url:source.url,title:source.title,publisher:source.publisher,role:source.source_role,extracted_text:source.notes || ""}));
-  const usable = sourceMaterial.filter(source => source.extracted_text.includes("EXTRACTED SOURCE TEXT:"));
+  const usable = sourceMaterial.filter(source => source.extracted_text.includes("EXTRACTED SOURCE TEXT (up to 12,000 characters):"));
   if (!usable.length) return false;
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method:"POST", headers:{Authorization:"Bearer "+apiKey,"Content-Type":"application/json"},
