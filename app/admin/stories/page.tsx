@@ -6,7 +6,7 @@ import { AdminNav } from "@/components/admin-nav";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-export default async function StoriesPage({ searchParams }: { searchParams: Promise<{ saved?: string; updated?: string; generated?: string; scan?: string; checked?: string; fetched?: string; imported?: string; duplicates?: string; ai?: string; errors?: string }> }) {
+export default async function StoriesPage({ searchParams }: { searchParams: Promise<{ saved?: string; updated?: string; generated?: string; scan?: string; checked?: string; fetched?: string; imported?: string; duplicates?: string; ai?: string; errors?: string; extracted?: string }> }) {
   const params = await searchParams;
   const sql = getSql();
   const [desks, stories] = await Promise.all([
@@ -24,7 +24,7 @@ export default async function StoriesPage({ searchParams }: { searchParams: Prom
         <div className="discovery-heading"><div><p className="newsroom-kicker">AUTOMATED DISCOVERY</p><h2>Scan registered RSS feeds</h2><p className="discovery-copy">Fetch recent feed entries, match duplicate URLs and use AI to screen relevant leads into the editorial desks. Nothing is published automatically.</p></div>
           <form action={runSourceDiscovery}><button className="admin-primary" type="submit">Run source scan →</button></form>
         </div>
-        {params.scan && <p className="admin-success">Scan complete: {params.checked || "0"} feeds checked, {params.fetched || "0"} entries fetched, {params.imported || "0"} new stories added, {params.duplicates || "0"} duplicates matched. AI screening: {params.ai === "on" ? "enabled" : "not active"}. Feed errors: {params.errors || "0"}.</p>}
+        {params.scan && <p className="admin-success">Scan complete: {params.checked || "0"} feeds checked, {params.fetched || "0"} entries fetched, {params.imported || "0"} new stories added, {params.duplicates || "0"} duplicates matched. Full article text extracted: {params.extracted || "0"}. AI screening: {params.ai === "on" ? "enabled" : "not active"}. Feed errors: {params.errors || "0"}.</p>}
         {params.ai === "off" && params.scan && <p className="discovery-note">RSS ingestion ran, but AI screening was not active. Add OPENAI_API_KEY in Vercel environment variables to enable story selection and desk scoring.</p>}
         <p className="discovery-note">Only active sources with an HTTPS feed URL are scanned. Add feed URLs in <a href="/admin/sources">Source Register</a>.</p>
       </section>
