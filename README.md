@@ -24,12 +24,15 @@ Includes the homepage, responsive navigation, editorial desk overview, brand sty
 ## Editorial principle
 AI may assist discovery and drafting, but every article requires explicit human editorial approval before publication. Verify names, dates, claims, quotes, image rights and sources. RSS access does not automatically grant republication rights.
 
+## Phase 2: newsroom foundations
+The initial Neon PostgreSQL schema is in `database/schema.sql`, with setup instructions in `database/README.md`. It defines editorial users and roles, the eight desks, sources, discovered stories, source evidence, articles, version history, approvals, media rights, workflow runs, audit history and newsletter subscribers. The schema must be applied to a new Neon database and `DATABASE_URL` configured in Vercel before the application database integration can be enabled.
+
 ## Next phases
-1. Live website and preview workflow.
-2. Database and editorial content model.
-3. Source discovery and story research workflows.
-4. AI-assisted drafting and mandatory human approval.
-5. Publishing, newsletter and analytics integrations.
+1. Complete Neon setup and verify the schema.
+2. Add secure editor authentication and role-based access.
+3. Build the private newsroom dashboard and article review workflow.
+4. Add source discovery, research and AI-assisted drafting.
+5. Connect approved articles to the public website, then newsletter and analytics.
 
 ## Brand note
 The publication name is provisional pending proper trademark and brand clearance. Similar positive-news publication naming exists; domain availability alone is not legal clearance.
