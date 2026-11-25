@@ -154,6 +154,26 @@ async function screenStories(items: FeedCandidate[]): Promise<StoryAssessment[] 
   return parsed.assessments;
 }
 
+async function extractSourceArticle(url: string): Promise<string> {
+  const parsed = new URL(url);
+  if (parsed.protocol !== "https:" || !parsed.hostname || parsed.username || parsed.password) throw new Error("Only public HTTPS article pages are supported.");
+  const response = await fetch(parsed.toString(), {
+    headers: { "User-Agent": "Mozilla/5.0 (compatible; PositivePressGlobal/1.0)", Accept: "text/html,application/xhtml+xml" },
+    redirect: "error", cache: "no-store", signal: AbortSignal.timeout(9000)
+  });
+  if (!response.ok) throw new Error("Article page returned HTTP " + response.status);
+  const html = (await response.text()).slice(0, 1000000);
+  const text = html
+    .replace(/<(script|style|noscript|svg|nav|footer|header|aside|form)\\b[^>]*>[\\s\\S]*?<\\/\\1>/gi, " ")
+    .replace(/<(article|main|p|h1|h2|h3|li|blockquote)\\b[^>]*>/gi, "\\n")
+    .replace(/<\\/(article|main|p|h1|h2|h3|li|blockquote)>/gi, "\\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;|&#160;/gi, " ").replace(/&amp;/gi, "&").replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">")
+    .replace(/\\s+/g, " ").trim();
+  if (text.length < 400) throw new Error("The page did not expose enough readable article text.");
+  return text.slice(0, 12000);
+}
 export async function runSourceDiscovery() {
   const sql = getSql();
   const sources = await sql`select id, name, feed_url, source_type from sources where is_active = true and feed_url is not null and trim(feed_url) <> '' order by name limit 50`;
@@ -215,9 +235,14 @@ export async function runSourceDiscovery() {
       ${assessment ? Math.min(5,Math.max(1,assessment.positivity)) : null},
       ${assessment ? Math.min(5,Math.max(1,assessment.relevance)) : null}) returning id`;
     const storyId = (inserted[0] as {id:string}).id;
-    await sql`insert into story_sources (story_id,source_id,url,title,publisher,published_at,source_role)
-      values (${storyId},${item.sourceId},${item.url},${item.title},${item.sourceName},${item.publishedAt},'supporting')
-      on conflict (story_id,url) do nothing`;
+    let extractedText = "";
+    let extractionNote = "";
+    try { extractedText = await extractSourceArticle(item.url); }
+    catch (error) { extractionNote = "Source text extraction failed: " + (error instanceof Error ? error.message : "Unknown extraction error"); }
+    const sourceNotes = extractedText ? "EXTRACTED SOURCE TEXT (up to 12,000 characters):\\n" + extractedText : extractionNote;
+    await sql`insert into story_sources (story_id,source_id,url,title,publisher,published_at,source_role,notes)
+      values (${storyId},${item.sourceId},${item.url},${item.title},${item.sourceName},${item.publishedAt},'primary',${sourceNotes || null})
+      on conflict (story_id,url) do update set notes=excluded.notes`;
     imported++;
     if (assessment) selected++;
   }
