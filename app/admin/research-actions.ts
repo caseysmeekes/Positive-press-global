@@ -19,7 +19,7 @@ export async function researchAndDraftStory(data: FormData) {
     from discovered_stories s left join editorial_desks d on d.id=s.desk_id where s.id=${storyId} limit 1`;
   if (!rows.length) throw new Error("Story not found.");
   const story = rows[0] as {id:string;headline:string;summary:string|null;canonical_url:string|null;desk_id:string|null;desk_name:string|null};
-  if (!story.desk_id) throw new Error("Assign this story to an editorial desk before drafting.");
+  if (!story.desk_id) redirect("/admin/stories?error=assign_desk");
 
   const sources = await sql`select url,title,publisher,source_role,notes from story_sources where story_id=${storyId} order by created_at asc limit 8`;
   const sourceMaterial = (sources as {url:string;title:string|null;publisher:string|null;source_role:string;notes:string|null}[]).map(s => ({
