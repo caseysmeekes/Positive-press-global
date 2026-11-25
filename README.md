@@ -54,3 +54,16 @@ The admin workspace currently includes:
 The newsroom is intentionally open during development. Do not treat this as production-safe: anyone who can reach the deployed site may be able to access the admin screens and create records. Keep the site private or use it only with non-sensitive test data until authentication is restored.
 
 The workflow currently supports manual source and story intake and draft creation. RSS ingestion, editing existing records, research automation, approvals and public publishing are subsequent implementation steps.
+
+
+## Overnight newsroom automation
+
+The scheduled newsroom endpoint is `/api/cron/newsroom`. Vercel invokes it using two UTC schedules so that the local execution window remains 02:00 in `Pacific/Auckland` across daylight-saving changes. The endpoint checks the local time, requires a bearer token, and records a daily run marker in `workflow_runs` to avoid duplicate runs.
+
+Configure the following Production environment variable in Vercel before enabling the schedule:
+
+- `CRON_SECRET`: a long random secret. Generate one locally with `openssl rand -base64 32`, then add the same value in Vercel. Do not commit the value or share it in chat.
+
+The cron is only active on Production deployments. It does not publish articles. AI-generated articles remain drafts requiring human editorial review.
+
+**Runtime note:** the current Vercel team is on the Hobby plan, whose function execution limit is 60 seconds. The existing discovery pipeline scans sources sequentially and may exceed that limit when feeds are slow or several drafts are generated. Treat the first scheduled run as a validation run. The next reliability improvement is to split discovery, extraction and drafting into smaller queued batches so that a single invocation cannot time out.
