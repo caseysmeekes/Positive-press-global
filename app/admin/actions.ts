@@ -244,7 +244,7 @@ export async function runSourceDiscovery() {
     } else {
       extractionNote = "Source text extraction queued for a later run to keep the scan within execution limits.";
     }
-    const sourceNotes = extractedText ? "EXTRACTED SOURCE TEXT (up to 12,000 characters):\\n" + extractedText : extractionNote;
+    const sourceNotes = extractedText ? "EXTRACTED SOURCE TEXT (up to 12,000 characters):\n" + extractedText : extractionNote;
     await sql`insert into story_sources (story_id,source_id,url,title,publisher,published_at,source_role,notes)
       values (${storyId},${item.sourceId},${item.url},${item.title},${item.sourceName},${item.publishedAt},'primary',${sourceNotes || null})
       on conflict (story_id,url) do update set notes=excluded.notes`;
