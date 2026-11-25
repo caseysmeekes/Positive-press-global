@@ -1,3 +1,4 @@
+import "../admin/admin.css";
 "use client";
 
 import { getProviders, signIn } from "next-auth/react";
