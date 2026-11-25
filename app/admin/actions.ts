@@ -156,8 +156,8 @@ async function screenStories(items: FeedCandidate[]): Promise<StoryAssessment[] 
 
 export async function runSourceDiscovery() {
   const sql = getSql();
-  const sources = await sql\`select id, name, feed_url, source_type from sources where is_active = true and feed_url is not null and trim(feed_url) <> '' order by name limit 50\`;
-  const run = await sql\`insert into workflow_runs (workflow_type,status,started_at,metadata) values ('source_fetch','running',now(),jsonb_build_object('source_count',\${sources.length})) returning id\`;
+  const sources = await sql`select id, name, feed_url, source_type from sources where is_active = true and feed_url is not null and trim(feed_url) <> '' order by name limit 50`;
+  const run = await sql`insert into workflow_runs (workflow_type,status,started_at,metadata) values ('source_fetch','running',now(),jsonb_build_object('source_count',${sources.length})) returning id`;
   const candidates: FeedCandidate[] = [];
   const errors: string[] = [];
   let checked = 0;
@@ -179,7 +179,7 @@ export async function runSourceDiscovery() {
     } catch (error) {
       errors.push(source.name + ": " + (error instanceof Error ? error.message : "Feed fetch failed"));
     }
-    await sql\`update sources set last_checked_at = now() where id = \${source.id}\`;
+    await sql`update sources set last_checked_at = now() where id = ${source.id}`;
   }
   const unique = [...new Map(candidates.map(item => [item.url,item])).values()].slice(0,60);
   let assessments: StoryAssessment[] | null = null;
@@ -188,7 +188,7 @@ export async function runSourceDiscovery() {
     try { assessments = await screenStories(unique); }
     catch (error) { aiError = error instanceof Error ? error.message : "AI screening failed"; }
   }
-  const desks = await sql\`select id,slug from editorial_desks where is_active = true\`;
+  const desks = await sql`select id,slug from editorial_desks where is_active = true`;
   const deskIds = new Map((desks as {id:string;slug:string}[]).map(desk => [desk.slug,desk.id]));
   const assessmentByIndex = new Map((assessments || []).map(item => [item.index,item]));
   let imported = 0;
@@ -197,36 +197,36 @@ export async function runSourceDiscovery() {
     const item = unique[index];
     const assessment = assessmentByIndex.get(index);
     if (assessments && (!assessment || !assessment.include)) continue;
-    const existing = await sql\`select id from discovered_stories where canonical_url = \${item.url} limit 1\`;
+    const existing = await sql`select id from discovered_stories where canonical_url = ${item.url} limit 1`;
     if (existing.length) {
       duplicates++;
       const storyId = (existing[0] as {id:string}).id;
-      await sql\`insert into story_sources (story_id,source_id,url,title,publisher,published_at,source_role)
-        values (\${storyId},\${item.sourceId},\${item.url},\${item.title},\${item.sourceName},\${item.publishedAt},'supporting')
-        on conflict (story_id,url) do nothing\`;
+      await sql`insert into story_sources (story_id,source_id,url,title,publisher,published_at,source_role)
+        values (${storyId},${item.sourceId},${item.url},${item.title},${item.sourceName},${item.publishedAt},'supporting')
+        on conflict (story_id,url) do nothing`;
       continue;
     }
     const deskId = assessment ? deskIds.get(assessment.desk) || null : null;
     const summary = assessment?.summary || item.summary || null;
-    const inserted = await sql\`insert into discovered_stories
+    const inserted = await sql`insert into discovered_stories
       (headline,summary,desk_id,canonical_url,original_published_at,status,priority,positivity_score,relevance_score)
-      values (\${item.title.slice(0,500)},\${summary},\${deskId},\${item.url},\${item.publishedAt},'discovered',
-      \${assessment ? Math.min(5,Math.max(1,assessment.priority)) : 3},
-      \${assessment ? Math.min(5,Math.max(1,assessment.positivity)) : null},
-      \${assessment ? Math.min(5,Math.max(1,assessment.relevance)) : null}) returning id\`;
+      values (${item.title.slice(0,500)},${summary},${deskId},${item.url},${item.publishedAt},'discovered',
+      ${assessment ? Math.min(5,Math.max(1,assessment.priority)) : 3},
+      ${assessment ? Math.min(5,Math.max(1,assessment.positivity)) : null},
+      ${assessment ? Math.min(5,Math.max(1,assessment.relevance)) : null}) returning id`;
     const storyId = (inserted[0] as {id:string}).id;
-    await sql\`insert into story_sources (story_id,source_id,url,title,publisher,published_at,source_role)
-      values (\${storyId},\${item.sourceId},\${item.url},\${item.title},\${item.sourceName},\${item.publishedAt},'supporting')
-      on conflict (story_id,url) do nothing\`;
+    await sql`insert into story_sources (story_id,source_id,url,title,publisher,published_at,source_role)
+      values (${storyId},${item.sourceId},${item.url},${item.title},${item.sourceName},${item.publishedAt},'supporting')
+      on conflict (story_id,url) do nothing`;
     imported++;
     if (assessment) selected++;
   }
-  await sql\`update workflow_runs set status='succeeded',completed_at=now(),items_processed=\${imported},
-    metadata=jsonb_build_object('sources_checked',\${checked},'items_fetched',\${fetched},'new_stories',\${imported},'duplicates',\${duplicates},'ai_screened',\${Boolean(assessments)},'ai_error',\${aiError},'feed_errors',\${errors.slice(0,10)})
-    where id=\${(run[0] as {id:string}).id}\`;
-  await sql\`insert into workflow_runs (workflow_type,status,started_at,completed_at,items_processed,metadata)
-    values ('story_discovery',\${assessments ? "succeeded" : "failed"},now(),now(),\${selected},
-    jsonb_build_object('screened',\${unique.length},'selected',\${selected},'ai_enabled',\${Boolean(assessments)},'error',\${aiError || (process.env.OPENAI_API_KEY ? "" : "OPENAI_API_KEY is not configured")}))\`;
+  await sql`update workflow_runs set status='succeeded',completed_at=now(),items_processed=${imported},
+    metadata=jsonb_build_object('sources_checked',${checked},'items_fetched',${fetched},'new_stories',${imported},'duplicates',${duplicates},'ai_screened',${Boolean(assessments)},'ai_error',${aiError},'feed_errors',${errors.slice(0,10)})
+    where id=${(run[0] as {id:string}).id}`;
+  await sql`insert into workflow_runs (workflow_type,status,started_at,completed_at,items_processed,metadata)
+    values ('story_discovery',${assessments ? "succeeded" : "failed"},now(),now(),${selected},
+    jsonb_build_object('screened',${unique.length},'selected',${selected},'ai_enabled',${Boolean(assessments)},'error',${aiError || (process.env.OPENAI_API_KEY ? "" : "OPENAI_API_KEY is not configured")}))`;
   revalidatePath("/admin");
   revalidatePath("/admin/stories");
   redirect("/admin/stories?scan=1&checked="+checked+"&fetched="+fetched+"&imported="+imported+"&duplicates="+duplicates+"&ai="+(assessments ? "on" : "off")+"&errors="+errors.length);
