@@ -231,3 +231,51 @@ export async function runSourceDiscovery() {
   revalidatePath("/admin/stories");
   redirect("/admin/stories?scan=1&checked="+checked+"&fetched="+fetched+"&imported="+imported+"&duplicates="+duplicates+"&ai="+(assessments ? "on" : "off")+"&errors="+errors.length);
 }
+
+export async function seedStarterSources() {
+  const rows = [
+    ["Positive News","https://www.positive.news","https://www.positive.news/feed/","publication","GB"],
+    ["Good News Network","https://www.goodnewsnetwork.org","https://www.goodnewsnetwork.org/feed/","publication","US"],
+    ["Reasons to be Cheerful","https://reasonstobecheerful.world","https://reasonstobecheerful.world/feed/","publication","US"],
+    ["Good Good Good","https://www.goodgoodgood.co","https://www.goodgoodgood.co/articles/rss.xml","publication","US"],
+    ["Optimist Daily","https://www.optimistdaily.com","https://www.optimistdaily.com/feed/","publication","US"],
+    ["Mongabay","https://news.mongabay.com","https://news.mongabay.com/feed/","publication","US"],
+    ["Yale Environment 360","https://e360.yale.edu","https://e360.yale.edu/feed.xml","publication","US"],
+    ["Carbon Brief","https://www.carbonbrief.org","https://www.carbonbrief.org/feed","publication","GB"],
+    ["World Resources Institute","https://www.wri.org","https://www.wri.org/insights/rss.xml","research","US"],
+    ["ScienceDaily Environment","https://www.sciencedaily.com","https://www.sciencedaily.com/rss/top/environment.xml","publication","US"],
+    ["Nature","https://www.nature.com","https://www.nature.com/nature.rss","research","GB"],
+    ["BBC Science and Environment","https://www.bbc.com/news/science_and_environment","https://feeds.bbci.co.uk/news/science_and_environment/rss.xml","publication","GB"],
+    ["BBC World","https://www.bbc.com/news/world","https://feeds.bbci.co.uk/news/world/rss.xml","publication","GB"],
+    ["BBC Travel","https://www.bbc.com/travel","https://www.bbc.com/travel/feed.rss","publication","GB"],
+    ["BBC Culture","https://www.bbc.com/culture","https://www.bbc.com/culture/feed.rss","publication","GB"],
+    ["BBC Future","https://www.bbc.com/future","https://www.bbc.com/future/feed.rss","publication","GB"],
+    ["BBC Sport","https://www.bbc.com/sport","https://feeds.bbci.co.uk/sport/rss.xml","publication","GB"],
+    ["NASA News Releases","https://www.nasa.gov","https://www.nasa.gov/news-release/feed/","official","US"],
+    ["NASA Aeronautics","https://www.nasa.gov/aeronautics","https://www.nasa.gov/aeronautics/feed/","official","US"],
+    ["NASA Science","https://science.nasa.gov","https://science.nasa.gov/feed/","official","US"],
+    ["UN News","https://news.un.org","https://news.un.org/feed/subscribe/en/news/all/rss.xml","official","UN"],
+    ["World Health Organization News","https://www.who.int","https://www.who.int/rss-feeds/news-english.xml","official","CH"],
+    ["Our World in Data","https://ourworldindata.org","https://ourworldindata.org/atom.xml","research","GB"],
+    ["Futurity","https://www.futurity.org","https://www.futurity.org/feed/","research","US"],
+    ["TechCrunch","https://techcrunch.com","https://techcrunch.com/feed/","publication","US"],
+    ["The Verge","https://www.theverge.com","https://www.theverge.com/rss/index.xml","publication","US"],
+    ["Ars Technica","https://arstechnica.com","https://feeds.arstechnica.com/arstechnica/technology-lab","publication","US"],
+    ["The Guardian Environment","https://www.theguardian.com/environment","https://www.theguardian.com/environment/rss","publication","GB"],
+    ["The Guardian Science","https://www.theguardian.com/science","https://www.theguardian.com/science/rss","publication","GB"],
+    ["The Conversation Australia","https://theconversation.com/au","https://theconversation.com/au/articles.atom","publication","AU"],
+    ["ABC News Australia","https://www.abc.net.au/news","https://www.abc.net.au/news/feed/51120/rss.xml","publication","AU"]
+  ] as const;
+  const sql = getSql();
+  let added = 0;
+  let existing = 0;
+  for (const [name, homepage, feed, type, country] of rows) {
+    const result = await sql`insert into sources (name,homepage_url,feed_url,source_type,country_code,is_active)
+      values (${name},${homepage},${feed},${type},${country},true)
+      on conflict do nothing returning id`;
+    if (result.length) added++; else existing++;
+  }
+  revalidatePath("/admin");
+  revalidatePath("/admin/sources");
+  redirect("/admin/sources?seeded=1&added=" + added + "&existing=" + existing);
+}
