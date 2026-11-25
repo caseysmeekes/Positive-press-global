@@ -1,19 +1,14 @@
 import "../../admin.css";
-import { getServerSession } from "next-auth";
-import { redirect } from "next/navigation";
-import { authOptions } from "@/lib/auth";
 import { getSql } from "@/lib/db";
 import { createArticle } from "../../actions";
 import { AdminNav } from "@/components/admin-nav";
 export const dynamic = "force-dynamic";
 
 export default async function NewArticlePage() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) redirect("/login");
   const sql = getSql();
   const desks = await sql`select id, name from editorial_desks where is_active = true order by display_order`;
   return <main className="newsroom">
-    <header className="newsroom-header"><a className="newsroom-brand" href="/">THE POSITIVE PRESS <span>GLOBAL / NEWSROOM</span></a><span className="newsroom-user">{session.user.name || "Editor"}</span></header>
+    <header className="newsroom-header"><a className="newsroom-brand" href="/">THE POSITIVE PRESS <span>GLOBAL / NEWSROOM</span></a><span className="newsroom-user">EDITORIAL WORKSPACE</span></header>
     <AdminNav />
     <section className="admin-content admin-editor-page">
       <p className="newsroom-kicker">EDITORIAL CONTENT / NEW DRAFT</p><h1 className="admin-page-title">Create an article.</h1>
