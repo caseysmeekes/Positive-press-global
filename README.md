@@ -63,3 +63,16 @@ The Neon integration has already added database variables. Keep `DATABASE_URL` s
 After adding variables, redeploy the project. Visit `/login` to test GitHub sign-in and `/admin` to open the private newsroom.
 
 The dashboard reads aggregate counts from Neon. The next implementation step is CRUD for sources, discovered stories and articles, plus approval and publishing actions. Do not treat the dashboard shell as a finished CMS.
+
+
+## Newsroom tools implemented
+
+The private admin workspace now includes:
+- `/admin/sources`: register and view editorial sources, including homepage, feed URL, type, country and notes.
+- `/admin/stories`: manually capture story leads, assign an editorial desk, add an original source URL and set priority.
+- `/admin/articles`: list article drafts and their editorial status.
+- `/admin/articles/new`: create an unpublished article draft and store its first version in the version history.
+
+All create actions require a valid server-side editor session. The admin routes remain protected by middleware. GitHub OAuth configuration is deliberately deferred until the owner is ready to activate newsroom access. Do not remove the protection or expose the admin routes publicly.
+
+The workflow currently supports manual source and story intake and draft creation. RSS ingestion, editing existing records, research automation, approvals and public publishing are subsequent implementation steps.
