@@ -81,7 +81,7 @@ export async function updateStoryTriage(data: FormData) {
   const sql = getSql();
   const updated = await sql`update discovered_stories set status = ${status}, verification_status = ${verification}, internal_notes = ${notes || null} where id = ${id} returning id`;
   if (!updated.length) throw new Error("Story not found.");
-  await sql`insert into editorial_audit_log (entity_type, entity_id, action, details) values ('story', ${id}, 'triage_updated', jsonb_build_object('status', ${status}, 'verification_status', ${verification}))`;
+  await sql`insert into editorial_audit_log (entity_type, entity_id, action, details) values ('story', ${id}, 'triage_updated', jsonb_build_object('status', ${status}::text, 'verification_status', ${verification}::text))`;
   revalidatePath("/admin");
   revalidatePath("/admin/stories");
   redirect("/admin/stories?updated=1");
@@ -157,7 +157,7 @@ async function screenStories(items: FeedCandidate[]): Promise<StoryAssessment[] 
 export async function runSourceDiscovery() {
   const sql = getSql();
   const sources = await sql`select id, name, feed_url, source_type from sources where is_active = true and feed_url is not null and trim(feed_url) <> '' order by name limit 50`;
-  const run = await sql`insert into workflow_runs (workflow_type,status,started_at,metadata) values ('source_fetch','running',now(),jsonb_build_object('source_count',${sources.length})) returning id`;
+  const run = await sql`insert into workflow_runs (workflow_type,status,started_at,metadata) values ('source_fetch','running',now(),jsonb_build_object('source_count',${sources.length}::int)) returning id`;
   const candidates: FeedCandidate[] = [];
   const errors: string[] = [];
   let checked = 0;
@@ -222,11 +222,11 @@ export async function runSourceDiscovery() {
     if (assessment) selected++;
   }
   await sql`update workflow_runs set status='succeeded',completed_at=now(),items_processed=${imported},
-    metadata=jsonb_build_object('sources_checked',${checked},'items_fetched',${fetched},'new_stories',${imported},'duplicates',${duplicates},'ai_screened',${Boolean(assessments)},'ai_error',${aiError},'feed_errors',${errors.slice(0,10)})
+    metadata=jsonb_build_object('sources_checked',${checked}::int,'items_fetched',${fetched}::int,'new_stories',${imported}::int,'duplicates',${duplicates}::int,'ai_screened',${Boolean(assessments)}::boolean,'ai_error',${aiError}::text,'feed_errors',${JSON.stringify(errors.slice(0,10))}::jsonb)
     where id=${(run[0] as {id:string}).id}`;
   await sql`insert into workflow_runs (workflow_type,status,started_at,completed_at,items_processed,metadata)
     values ('story_discovery',${assessments ? "succeeded" : "failed"},now(),now(),${selected},
-    jsonb_build_object('screened',${unique.length},'selected',${selected},'ai_enabled',${Boolean(assessments)},'error',${aiError || (process.env.OPENAI_API_KEY ? "" : "OPENAI_API_KEY is not configured")}))`;
+    jsonb_build_object('screened',${unique.length}::int,'selected',${selected}::int,'ai_enabled',${Boolean(assessments)}::boolean,'error',${aiError || (process.env.OPENAI_API_KEY ? "" : "OPENAI_API_KEY is not configured")}::text))`;
   revalidatePath("/admin");
   revalidatePath("/admin/stories");
   redirect("/admin/stories?scan=1&checked="+checked+"&fetched="+fetched+"&imported="+imported+"&duplicates="+duplicates+"&ai="+(assessments ? "on" : "off")+"&errors="+errors.length);
