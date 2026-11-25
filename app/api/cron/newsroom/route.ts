@@ -3,7 +3,7 @@ import { getSql } from "@/lib/db";
 import { runSourceDiscoveryCore } from "@/app/admin/actions";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 300;
+export const maxDuration = 60;
 
 function christchurchClock(now = new Date()) {
   const parts = new Intl.DateTimeFormat("en-NZ", {
@@ -23,7 +23,7 @@ function christchurchClock(now = new Date()) {
   };
 }
 
-export async function GET(request: Request) {
+async function handleCron(request: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -68,3 +68,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: false, error: message, local_date: local.date }, { status: 500 });
   }
 }
+
+export async function GET(request: Request) { return handleCron(request); }
+export async function POST(request: Request) { return handleCron(request); }
