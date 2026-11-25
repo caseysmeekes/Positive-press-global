@@ -67,3 +67,17 @@ Configure the following Production environment variable in Vercel before enablin
 The cron is only active on Production deployments. It does not publish articles. AI-generated articles remain drafts requiring human editorial review.
 
 **Runtime note:** the current Vercel team is on the Hobby plan, whose function execution limit is 60 seconds. The existing discovery pipeline scans sources sequentially and may exceed that limit when feeds are slow or several drafts are generated. Treat the first scheduled run as a validation run. The next reliability improvement is to split discovery, extraction and drafting into smaller queued batches so that a single invocation cannot time out.
+
+
+## Gemini AI configuration
+
+All AI-powered story screening, manual research and overnight article drafting use Google's Gemini Developer API. The application uses the official `@google/genai` SDK on the server; API credentials are never sent to the browser.
+
+Add these Production (and Preview, if you test previews) environment variables in Vercel:
+
+- `GEMINI_API_KEY`: create an API key in [Google AI Studio](https://aistudio.google.com/api-keys).
+- `GEMINI_MODEL` (optional): defaults to `gemini-2.5-flash`.
+
+The Google AI Plus consumer subscription does not itself supply this API key. Gemini API access and billing/quotas are managed separately in Google AI Studio. Once the Gemini deployment is working, the old `OPENAI_API_KEY` variable is no longer used by this application and can be removed from Vercel.
+
+The shared Gemini client is in `lib/gemini.ts`. It requests JSON responses for predictable newsroom screening and drafting output. AI-generated work remains unpublished and requires human editorial review.
