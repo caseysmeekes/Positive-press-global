@@ -238,8 +238,12 @@ export async function runSourceDiscovery() {
     const storyId = (inserted[0] as {id:string}).id;
     let extractedText = "";
     let extractionNote = "";
-    try { extractedText = await extractSourceArticle(item.url); }
-    catch (error) { extractionNote = "Source text extraction failed: " + (error instanceof Error ? error.message : "Unknown extraction error"); }
+    if (extracted < 8) {
+      try { extractedText = await extractSourceArticle(item.url); extracted++; }
+      catch (error) { extractionNote = "Source text extraction failed: " + (error instanceof Error ? error.message : "Unknown extraction error"); }
+    } else {
+      extractionNote = "Source text extraction queued for a later run to keep the scan within execution limits.";
+    }
     const sourceNotes = extractedText ? "EXTRACTED SOURCE TEXT (up to 12,000 characters):\\n" + extractedText : extractionNote;
     await sql`insert into story_sources (story_id,source_id,url,title,publisher,published_at,source_role,notes)
       values (${storyId},${item.sourceId},${item.url},${item.title},${item.sourceName},${item.publishedAt},'primary',${sourceNotes || null})
