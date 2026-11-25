@@ -75,11 +75,13 @@ export async function updateStoryTriage(data: FormData) {
   const status = value(data, "status");
   const verification = value(data, "verification_status");
   const notes = value(data, "internal_notes");
+  const deskId = value(data, "desk_id");
   const allowedStatuses = ["discovered", "shortlisted", "researching", "drafted", "rejected", "duplicate", "archived"];
   const allowedVerification = ["unverified", "in_review", "partially_verified", "verified", "disputed"];
   if (!id || !allowedStatuses.includes(status) || !allowedVerification.includes(verification)) throw new Error("Invalid story triage update.");
   const sql = getSql();
-  const updated = await sql`update discovered_stories set status = ${status}, verification_status = ${verification}, internal_notes = ${notes || null} where id = ${id} returning id`;
+  if (!deskId) throw new Error("Assign an editorial desk before saving triage.");
+  const updated = await sql`update discovered_stories set desk_id = ${deskId}, status = ${status}, verification_status = ${verification}, internal_notes = ${notes || null} where id = ${id} returning id`;
   if (!updated.length) throw new Error("Story not found.");
   await sql`insert into editorial_audit_log (entity_type, entity_id, action, details) values ('story', ${id}, 'triage_updated', jsonb_build_object('status', ${status}::text, 'verification_status', ${verification}::text))`;
   revalidatePath("/admin");
