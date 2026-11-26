@@ -6,7 +6,8 @@ type JsonGenerationOptions = {
   temperature?: number;
 };
 
-const TRANSIENT_ERROR = /429|500|502|503|504|408|rate.?limit|temporar|overloaded|timeout|fetch failed|unavailable/i;
+const RETRYABLE_ERROR = /500|502|503|504|408|temporar|overloaded|timeout|fetch failed|unavailable/i;
+const QUOTA_ERROR = /429|resource_exhausted|quota exceeded|current quota/i;
 
 function errorMessage(error: unknown): string {
   if (!(error instanceof Error)) return "Unknown Gemini API error.";
@@ -15,7 +16,7 @@ function errorMessage(error: unknown): string {
 }
 
 function isTransient(error: unknown): boolean {
-  return TRANSIENT_ERROR.test(errorMessage(error));
+  return RETRYABLE_ERROR.test(errorMessage(error));
 }
 
 function wait(ms: number): Promise<void> {
@@ -65,14 +66,14 @@ export async function generateGeminiJson<T>(options: JsonGenerationOptions): Pro
     throw new Error("Gemini is not configured. Add GEMINI_API_KEY to the Vercel environment variables, then redeploy.");
   }
 
-  const primaryModel = process.env.GEMINI_MODEL || "gemini-3.8-flash";
-  const fallbackModel = process.env.GEMINI_FALLBACK_MODEL || "gemini-3.5-flash-lite";
+  const primaryModel = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
+  const fallbackModel = process.env.GEMINI_FALLBACK_MODEL || "gemini-3.8-flash";
   const ai = new GoogleGenAI({ apiKey });
 
   try {
     return await requestWithRetry<T>(ai, primaryModel, options);
   } catch (primaryError) {
-    if (!isTransient(primaryError) || fallbackModel === primaryModel) {
+    if ((!isTransient(primaryError) && !QUOTA_ERROR.test(errorMessage(primaryError))) || fallbackModel === primaryModel) {
       throw new Error("Gemini request failed (" + primaryModel + "): " + errorMessage(primaryError));
     }
 
