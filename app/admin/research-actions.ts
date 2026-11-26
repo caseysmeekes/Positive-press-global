@@ -38,6 +38,7 @@ export async function researchAndDraftStory(data: FormData) {
   try {
     const { generateGeminiJson } = await import("@/lib/gemini");
     const draft = await generateGeminiJson<{
+      ready_to_publish_as_draft?:boolean;reason_if_insufficient?:string;
       research_summary?:string;key_facts?:string[];claims_to_verify?:string[];
       missing_perspectives?:string[];source_assessment?:string;headline?:string;
       standfirst?:string;article_markdown?:string;seo_description?:string
@@ -46,11 +47,12 @@ export async function researchAndDraftStory(data: FormData) {
       prompt: JSON.stringify({
         story:{headline:story.headline,summary:story.summary,desk:story.desk_name,original_url:story.canonical_url},
         source_material:sourceMaterial,
-        output:{research_summary:"string",key_facts:["string"],claims_to_verify:["string"],missing_perspectives:["string"],source_assessment:"string",headline:"string",standfirst:"string",article_markdown:"string",seo_description:"string"}
+        output:{ready_to_publish_as_draft:"boolean",reason_if_insufficient:"string",research_summary:"string",key_facts:["string"],claims_to_verify:["string"],missing_perspectives:["string"],source_assessment:"string",headline:"string",standfirst:"string",article_markdown:"publication-ready article prose only",seo_description:"string"}
       }),
       temperature: 0.25
     });
-    if (!draft.headline || !draft.article_markdown) throw new Error("The AI response did not include a complete article draft.");
+    if (draft.ready_to_publish_as_draft === false) throw new Error("The supplied source material is not strong enough for a responsible article draft. " + (draft.reason_if_insufficient || "Add fuller source material, then retry."));
+    if (!draft.headline || !draft.article_markdown || draft.article_markdown.trim().length < 900) throw new Error("The AI response did not meet the article quality threshold. Add fuller source material and retry.");
 
     const pack = [
       "AI RESEARCH PACK. HUMAN VERIFICATION REQUIRED.",
