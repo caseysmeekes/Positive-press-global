@@ -92,8 +92,9 @@ export async function researchAndDraftStory(data: FormData) {
     const message = error instanceof Error ? error.message : "Research and drafting failed";
     await sql`update workflow_runs set status='failed',completed_at=now(),error_message=${message} where id=${(run[0] as {id:string}).id}`;
     const transient = /503|UNAVAILABLE|high demand|429|rate.?limit|temporar|overloaded|timeout/i.test(message);
+    const insufficientSource = /source material is not strong enough|source material|quality threshold/i.test(message);
     redirect(transient
       ? "/admin/stories?error=gemini_temporarily_unavailable"
-      : "/admin/stories?error=research_failed");
+      : insufficientSource ? "/admin/stories?error=insufficient_source_material" : "/admin/stories?error=research_failed");
   }
 }
