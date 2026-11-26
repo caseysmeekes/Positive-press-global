@@ -1,20 +1,34 @@
 import { GoogleGenAI } from "@google/genai";
 
+export const GEMINI_PRIMARY_MODEL: string = "gemini-3.5-flash-lite";
+export const GEMINI_FALLBACK_MODEL: string = "gemini-3.8-flash";
+
 type JsonGenerationOptions = {
   systemInstruction: string;
   prompt: string;
   temperature?: number;
 };
 
-export async function generateGeminiJson<T>(options: JsonGenerationOptions): Promise<T> {
-  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is missing. Add your Google AI Studio API key to the Vercel environment variables.");
-  }
+const RETRYABLE_ERROR = /500|502|503|504|408|temporar|overloaded|timeout|fetch failed|unavailable/i;
+const QUOTA_ERROR = /429|resource_exhausted|quota exceeded|current quota/i;
 
-  const ai = new GoogleGenAI({ apiKey });
+function errorMessage(error: unknown): string {
+  if (!(error instanceof Error)) return "Unknown Gemini API error.";
+  const message = error.message.replace(/\\s+/g, " ").trim();
+  return message.length > 500 ? message.slice(0, 500) + "…" : message;
+}
+
+function isTransient(error: unknown): boolean {
+  return RETRYABLE_ERROR.test(errorMessage(error));
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function requestJson<T>(ai: GoogleGenAI, model: string, options: JsonGenerationOptions): Promise<T> {
   const response = await ai.models.generateContent({
-    model: process.env.GEMINI_MODEL || "gemini-3.8-flash",
+    model,
     contents: options.prompt,
     config: {
       systemInstruction: options.systemInstruction,
@@ -28,6 +42,52 @@ export async function generateGeminiJson<T>(options: JsonGenerationOptions): Pro
   try {
     return JSON.parse(raw) as T;
   } catch {
-    throw new Error("Gemini returned invalid JSON. Please retry the draft.");
+    throw new Error("Gemini returned invalid JSON. Check the prompt and model response.");
+  }
+}
+
+async function requestWithRetry<T>(ai: GoogleGenAI, model: string, options: JsonGenerationOptions): Promise<T> {
+  let lastError: unknown;
+  // Two attempts per model. Keep retries bounded so a server action cannot sit
+  // inside repeated long waits and consume the Vercel function execution window.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      return await requestJson<T>(ai, model, options);
+    } catch (error) {
+      lastError = error;
+      if (!isTransient(error) || attempt === 1) throw error;
+      const backoff = 1200 * (2 ** attempt) + Math.floor(Math.random() * 500);
+      await wait(backoff);
+    }
+  }
+  throw lastError;
+}
+
+export async function generateGeminiJson<T>(options: JsonGenerationOptions): Promise<T> {
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  if (!apiKey) {
+    throw new Error("Gemini is not configured. Add GEMINI_API_KEY to the Vercel environment variables, then redeploy.");
+  }
+
+  const primaryModel = GEMINI_PRIMARY_MODEL;
+  const fallbackModel = GEMINI_FALLBACK_MODEL;
+  const ai = new GoogleGenAI({ apiKey });
+
+  try {
+    return await requestWithRetry<T>(ai, primaryModel, options);
+  } catch (primaryError) {
+    if ((!isTransient(primaryError) && !QUOTA_ERROR.test(errorMessage(primaryError))) || fallbackModel === primaryModel) {
+      throw new Error("Gemini request failed (" + primaryModel + "): " + errorMessage(primaryError));
+    }
+
+    try {
+      return await requestWithRetry<T>(ai, fallbackModel, options);
+    } catch (fallbackError) {
+      throw new Error(
+        "Gemini is temporarily unavailable. Primary model " + primaryModel + " failed: " +
+        errorMessage(primaryError) + ". Fallback model " + fallbackModel + " failed: " +
+        errorMessage(fallbackError)
+      );
+    }
   }
 }

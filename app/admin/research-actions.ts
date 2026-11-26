@@ -2,7 +2,6 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSql } from "@/lib/db";
-import { generateGeminiJson } from "@/lib/gemini";
 
 const formValue = (data: FormData, key: string) => {
   const v = data.get(key);
@@ -12,7 +11,7 @@ const formValue = (data: FormData, key: string) => {
 export async function researchAndDraftStory(data: FormData) {
   const storyId = formValue(data, "story_id");
   if (!storyId) throw new Error("Story ID is required.");
-  if (!(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)) throw new Error("GEMINI_API_KEY is missing from this deployment.");
+  if (!(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)) redirect("/admin/stories?error=gemini_not_configured");
 
   const sql = getSql();
   const rows = await sql`select s.id,s.headline,s.summary,s.canonical_url,s.desk_id,d.name as desk_name
@@ -20,6 +19,10 @@ export async function researchAndDraftStory(data: FormData) {
   if (!rows.length) throw new Error("Story not found.");
   const story = rows[0] as {id:string;headline:string;summary:string|null;canonical_url:string|null;desk_id:string|null;desk_name:string|null};
   if (!story.desk_id) redirect("/admin/stories?error=assign_desk");
+
+  // Prevent repeated clicks/retries from creating duplicate AI drafts for one story.
+  const existingDrafts = await sql`select id from articles where story_id=${storyId} order by updated_at desc limit 1`;
+  if (existingDrafts.length) redirect("/admin/articles?existing=1");
 
   const sources = await sql`select url,title,publisher,source_role,notes from story_sources where story_id=${storyId} order by created_at asc limit 8`;
   const sourceMaterial = (sources as {url:string;title:string|null;publisher:string|null;source_role:string;notes:string|null}[]).map(s => ({
@@ -33,20 +36,23 @@ export async function researchAndDraftStory(data: FormData) {
   const run = await sql`insert into workflow_runs (workflow_type,status,started_at,metadata)
     values ('research','running',now(),jsonb_build_object('story_id',${storyId}::text,'source_count',${sourceMaterial.length}::int)) returning id`;
   try {
+    const { generateGeminiJson } = await import("@/lib/gemini");
     const draft = await generateGeminiJson<{
+      ready_to_publish_as_draft?:boolean;reason_if_insufficient?:string;
       research_summary?:string;key_facts?:string[];claims_to_verify?:string[];
       missing_perspectives?:string[];source_assessment?:string;headline?:string;
       standfirst?:string;article_markdown?:string;seo_description?:string
     }>({
-      systemInstruction: "You are the research editor and feature writer for The Positive Press Global. Produce an original, careful article draft and an editorial research pack using only the supplied information. You cannot browse or independently verify facts. Never invent details, quotes, statistics, dates, names or corroboration. Clearly label all unsupported or single-source claims as needing verification. Do not closely paraphrase source notes. Return valid JSON only.",
+      systemInstruction: "You are the senior commissioning editor and feature writer for The Positive Press Global, an international publication known for distinctive, intelligent, constructive journalism. Write like an experienced human journalist, not a content generator. Find the specific, genuinely interesting story in the evidence and lead with the most compelling verified development, never generic scene-setting. Make the article informative, vivid and readable. Use concrete facts, named people, organisations, locations, dates, figures and examples only when supplied. Explain why the development matters with relevant context, but distinguish sourced facts from interpretation. Use varied sentence lengths, natural transitions and purposeful paragraphs. Avoid repetitive phrasing, empty optimism, cliches, rhetorical padding and generic conclusions. Never use stock openings such as 'as the calendar turns' or 'thoughts naturally drift'. Aim for 600-850 words only when evidence supports that length; if the material supports only a short news story, write 300-450 strong words. If evidence is too thin, return ready_to_publish_as_draft=false rather than inventing or padding. You cannot browse or independently verify facts. Never invent quotes, statistics, dates, forecasts, probabilities, names, outcomes, expert views or corroboration. Do not closely paraphrase source wording. The article_markdown field must contain publication-ready article prose and useful Markdown subheadings only. Do not put source lists, research notes, editorial caveats, AI disclaimers, verification checklists, word counts or comments to the editor in the article body. Return valid JSON only with ready_to_publish_as_draft, reason_if_insufficient, research_summary, key_facts, claims_to_verify, missing_perspectives, source_assessment, headline, standfirst, article_markdown and seo_description.",
       prompt: JSON.stringify({
         story:{headline:story.headline,summary:story.summary,desk:story.desk_name,original_url:story.canonical_url},
         source_material:sourceMaterial,
-        output:{research_summary:"string",key_facts:["string"],claims_to_verify:["string"],missing_perspectives:["string"],source_assessment:"string",headline:"string",standfirst:"string",article_markdown:"string",seo_description:"string"}
+        output:{ready_to_publish_as_draft:"boolean",reason_if_insufficient:"string",research_summary:"string",key_facts:["string"],claims_to_verify:["string"],missing_perspectives:["string"],source_assessment:"string",headline:"string",standfirst:"string",article_markdown:"publication-ready article prose only",seo_description:"string"}
       }),
       temperature: 0.25
     });
-    if (!draft.headline || !draft.article_markdown) throw new Error("The AI response did not include a complete article draft.");
+    if (draft.ready_to_publish_as_draft === false) throw new Error("The supplied source material is not strong enough for a responsible article draft. " + (draft.reason_if_insufficient || "Add fuller source material, then retry."));
+    if (!draft.headline || !draft.article_markdown || draft.article_markdown.trim().length < 900) throw new Error("The AI response did not meet the article quality threshold. Add fuller source material and retry.");
 
     const pack = [
       "AI RESEARCH PACK. HUMAN VERIFICATION REQUIRED.",
@@ -69,7 +75,7 @@ export async function researchAndDraftStory(data: FormData) {
     )
     insert into article_versions (article_id,version_number,title,standfirst,body_markdown,change_summary)
     select id,1,title,standfirst,body_markdown,'AI-assisted first draft and research pack' from a returning article_id`;
-    await sql`update discovered_stories set status='drafted',internal_notes=concat_ws(E'\\n\\n',internal_notes,${pack}) where id=${storyId}`;
+    await sql`update discovered_stories set status='drafted',internal_notes=concat_ws(E'\\n\\n',internal_notes,${pack}::text) where id=${storyId}`;
     await sql`update workflow_runs set status='succeeded',completed_at=now(),items_processed=1,
       metadata=jsonb_build_object('story_id',${storyId}::text,'article_id',${(created[0] as {article_id:string}).article_id}::text,'source_count',${sourceMaterial.length}::int)
       where id=${(run[0] as {id:string}).id}`;
@@ -83,7 +89,11 @@ export async function researchAndDraftStory(data: FormData) {
     redirect("/admin/articles?generated=1");
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error && String((error as {digest?:unknown}).digest).startsWith("NEXT_REDIRECT")) throw error;
-    await sql`update workflow_runs set status='failed',completed_at=now(),error_message=${error instanceof Error ? error.message : "Research and drafting failed"} where id=${(run[0] as {id:string}).id}`;
-    throw error;
+    const message = error instanceof Error ? error.message : "Research and drafting failed";
+    await sql`update workflow_runs set status='failed',completed_at=now(),error_message=${message} where id=${(run[0] as {id:string}).id}`;
+    const transient = /503|UNAVAILABLE|high demand|429|rate.?limit|temporar|overloaded|timeout/i.test(message);
+    redirect(transient
+      ? "/admin/stories?error=gemini_temporarily_unavailable"
+      : "/admin/stories?error=research_failed");
   }
 }
