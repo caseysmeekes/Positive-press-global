@@ -69,7 +69,7 @@ export async function researchAndDraftStory(data: FormData) {
     )
     insert into article_versions (article_id,version_number,title,standfirst,body_markdown,change_summary)
     select id,1,title,standfirst,body_markdown,'AI-assisted first draft and research pack' from a returning article_id`;
-    await sql`update discovered_stories set status='drafted',internal_notes=concat_ws(E'\\n\\n',internal_notes,${pack}) where id=${storyId}`;
+    await sql`update discovered_stories set status='drafted',internal_notes=concat_ws(E'\\n\\n',internal_notes,${pack}::text) where id=${storyId}`;
     await sql`update workflow_runs set status='succeeded',completed_at=now(),items_processed=1,
       metadata=jsonb_build_object('story_id',${storyId}::text,'article_id',${(created[0] as {article_id:string}).article_id}::text,'source_count',${sourceMaterial.length}::int)
       where id=${(run[0] as {id:string}).id}`;
