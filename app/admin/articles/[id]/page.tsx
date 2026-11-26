@@ -1,4 +1,4 @@
-import "../admin.css";
+import "../../admin.css";
 import { notFound } from "next/navigation";
 import { getSql } from "@/lib/db";
 import { AdminNav } from "@/components/admin-nav";
