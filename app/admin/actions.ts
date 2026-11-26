@@ -2,7 +2,6 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSql } from "@/lib/db";
-import { generateGeminiJson } from "@/lib/gemini";
 
 const value = (data: FormData, key: string) => {
   const item = data.get(key);
@@ -133,6 +132,7 @@ function validateFeedUrl(value: string): string {
 }
 async function screenStories(items: FeedCandidate[]): Promise<StoryAssessment[] | null> {
   if (!items.length) return null;
+  const { generateGeminiJson } = await import("@/lib/gemini");
   const parsed = await generateGeminiJson<{ assessments?: StoryAssessment[] }>({
     systemInstruction: "You screen story leads for The Positive Press Global. Prioritise constructive positive global stories, solutions, conservation, science, communities and culture. Also retain strong specialist stories about aviation and aerospace, sport and officiating, and technology. Reject routine promotions, thin press releases, clickbait, gossip and low-public-interest items. Never invent facts. Return JSON {assessments:[...]}. For each input index return include boolean, desk slug, positivity 1-5, relevance 1-5, priority 1-5 and one cautious summary sentence. Allowed desk slugs: good-news, planet-positive, people-places, science-discovery, food-culture, aviation-aerospace, sport-officiating, technology-innovation.",
     prompt: JSON.stringify({ items: items.map((item,index) => ({ index, headline:item.title, publisher:item.sourceName, sourceType:item.sourceType, summary:item.summary.slice(0,800), url:item.url })) }),
@@ -153,6 +153,7 @@ async function createOvernightDraft(storyId: string): Promise<boolean> {
   const sourceMaterial = (sources as {url:string;title:string|null;publisher:string|null;source_role:string;notes:string|null}[]).map(source => ({url:source.url,title:source.title,publisher:source.publisher,role:source.source_role,extracted_text:source.notes || ""}));
   const usable = sourceMaterial.filter(source => source.extracted_text.includes("EXTRACTED SOURCE TEXT (up to 12,000 characters):"));
   if (!usable.length) return false;
+  const { generateGeminiJson } = await import("@/lib/gemini");
   const draft = await generateGeminiJson<{headline?:string;standfirst?:string;article_markdown?:string;seo_description?:string;research_summary?:string;claims_to_verify?:string[];source_assessment?:string}>({
     systemInstruction: "You are the commissioning editor and original writer for The Positive Press Global. Create a genuinely original, accurate, readable article draft from the supplied source text. Do not reproduce or closely paraphrase source wording, structure, distinctive turns of phrase or quotations. Do not invent facts, people, dates, statistics, outcomes or quotes. Use direct quotes only when they are present in the supplied text and clearly attributed, otherwise paraphrase facts in fresh language. Distinguish reported facts from interpretation. If evidence is thin, write a shorter cautious draft rather than padding. Do not claim independent verification. Add a short editor's verification checklist. Return valid JSON only.",
     prompt: JSON.stringify({story:{headline:story.headline,summary:story.summary,desk:story.desk_name},sources:usable,required_output:{headline:"string",standfirst:"string",article_markdown:"string",seo_description:"string",research_summary:"string",claims_to_verify:["string"],source_assessment:"string"}}),
@@ -278,14 +279,14 @@ export async function runSourceDiscoveryCore() {
   await sql`insert into workflow_runs (workflow_type,status,started_at,completed_at,items_processed,metadata)
     values ('story_discovery',${assessments ? "succeeded" : "failed"},now(),now(),${selected},
     jsonb_build_object('screened',${unique.length}::int,'selected',${selected}::int,'ai_enabled',${Boolean(assessments)}::boolean,'error',${aiError || ((process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) ? "" : "GEMINI_API_KEY is not configured")}::text))`;
-  return { checked, fetched, imported, duplicates, aiEnabled: Boolean(assessments), feedErrors: errors.length, extracted, draftsCreated, draftErrors: draftErrors.length };
+  return { checked, fetched, imported, duplicates, aiEnabled: Boolean(assessments), aiStatus: assessments ? "enabled" as const : aiConfigured ? "error" as const : "not_configured" as const, aiError, feedErrors: errors.length, extracted, draftsCreated, draftErrors: draftErrors.length };
 }
 
 export async function runSourceDiscovery() {
   const result = await runSourceDiscoveryCore();
   revalidatePath("/admin");
   revalidatePath("/admin/stories");
-  redirect("/admin/stories?scan=1&checked="+result.checked+"&fetched="+result.fetched+"&imported="+result.imported+"&duplicates="+result.duplicates+"&ai="+(result.aiEnabled ? "on" : "off")+"&errors="+result.feedErrors+"&extracted="+result.extracted+"&drafts="+result.draftsCreated+"&draftErrors="+result.draftErrors);
+  redirect("/admin/stories?scan=1&checked="+result.checked+"&fetched="+result.fetched+"&imported="+result.imported+"&duplicates="+result.duplicates+"&ai="+(result.aiEnabled ? "on" : result.aiStatus === "error" ? "error" : "off")+"&aiError="+encodeURIComponent(result.aiError || "")+"&errors="+result.feedErrors+"&extracted="+result.extracted+"&drafts="+result.draftsCreated+"&draftErrors="+result.draftErrors);
 }
 
 export async function seedStarterSources() {
