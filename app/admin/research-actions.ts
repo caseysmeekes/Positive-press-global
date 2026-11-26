@@ -2,7 +2,6 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSql } from "@/lib/db";
-import { generateGeminiJson } from "@/lib/gemini";
 
 const formValue = (data: FormData, key: string) => {
   const v = data.get(key);
@@ -33,6 +32,7 @@ export async function researchAndDraftStory(data: FormData) {
   const run = await sql`insert into workflow_runs (workflow_type,status,started_at,metadata)
     values ('research','running',now(),jsonb_build_object('story_id',${storyId}::text,'source_count',${sourceMaterial.length}::int)) returning id`;
   try {
+    const { generateGeminiJson } = await import("@/lib/gemini");
     const draft = await generateGeminiJson<{
       research_summary?:string;key_facts?:string[];claims_to_verify?:string[];
       missing_perspectives?:string[];source_assessment?:string;headline?:string;
