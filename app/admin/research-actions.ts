@@ -20,6 +20,10 @@ export async function researchAndDraftStory(data: FormData) {
   const story = rows[0] as {id:string;headline:string;summary:string|null;canonical_url:string|null;desk_id:string|null;desk_name:string|null};
   if (!story.desk_id) redirect("/admin/stories?error=assign_desk");
 
+  // Prevent repeated clicks/retries from creating duplicate AI drafts for one story.
+  const existingDrafts = await sql`select id from articles where story_id=${storyId} order by updated_at desc limit 1`;
+  if (existingDrafts.length) redirect("/admin/articles?existing=1");
+
   const sources = await sql`select url,title,publisher,source_role,notes from story_sources where story_id=${storyId} order by created_at asc limit 8`;
   const sourceMaterial = (sources as {url:string;title:string|null;publisher:string|null;source_role:string;notes:string|null}[]).map(s => ({
     url:s.url, title:s.title, publisher:s.publisher, role:s.source_role, editorial_notes:s.notes
