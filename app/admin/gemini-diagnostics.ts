@@ -54,7 +54,7 @@ export async function runGeminiDiagnostics() {
   const primaryListed = modelNames.includes(primary);
   const fallbackListed = modelNames.includes(fallback);
   const primaryTest = await testModel(ai, primary);
-  const fallbackTest = fallback === primary ? null : await testModel(ai, fallback);
+  const fallbackTest = String(fallback) === String(primary) ? null : await testModel(ai, fallback);
 
   const summary = {
     primary, fallback,
