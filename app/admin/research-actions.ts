@@ -11,7 +11,7 @@ const formValue = (data: FormData, key: string) => {
 export async function researchAndDraftStory(data: FormData) {
   const storyId = formValue(data, "story_id");
   if (!storyId) throw new Error("Story ID is required.");
-  if (!(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)) throw new Error("GEMINI_API_KEY is missing from this deployment.");
+  if (!(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)) redirect("/admin/stories?error=gemini_not_configured");
 
   const sql = getSql();
   const rows = await sql`select s.id,s.headline,s.summary,s.canonical_url,s.desk_id,d.name as desk_name
