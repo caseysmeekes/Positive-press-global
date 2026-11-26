@@ -220,9 +220,18 @@ export async function runSourceDiscoveryCore() {
   const unique = [...new Map<string, FeedCandidate>(candidates.map(item => [item.url,item] as const)).values()].slice(0,60);
   let assessments: StoryAssessment[] | null = null;
   let aiError = "";
-  if ((process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) && unique.length) {
-    try { assessments = await screenStories(unique); }
-    catch (error) { aiError = error instanceof Error ? error.message : "AI screening failed"; }
+  const aiConfigured = Boolean(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY);
+  if (aiConfigured && unique.length) {
+    try {
+      assessments = await screenStories(unique);
+      if (!assessments) throw new Error("Gemini screening returned no assessments.");
+    } catch (error) {
+      aiError = error instanceof Error ? error.message : "AI screening failed";
+      await sql`update workflow_runs set status='failed',completed_at=now(),error_message=${aiError},metadata=jsonb_build_object('source_count',${sources.length}::int,'candidate_count',${unique.length}::int,'stage','gemini_screening_failed') where id=${(run[0] as {id:string}).id}`;
+      await sql`insert into workflow_runs (workflow_type,status,started_at,completed_at,items_processed,metadata)
+        values ('story_discovery','failed',now(),now(),0,jsonb_build_object('screened',${unique.length}::int,'ai_enabled',true,'error',${aiError}::text))`;
+      return { checked, fetched, imported: 0, duplicates: 0, aiEnabled: false, aiStatus: "error" as const, aiError, feedErrors: errors.length, extracted: 0, draftsCreated: 0, draftErrors: 0 };
+    }
   }
   const desks = await sql`select id,slug from editorial_desks where is_active = true`;
   const deskIds = new Map<string, string>((desks as {id:string;slug:string}[]).map(desk => [desk.slug,desk.id] as const));
