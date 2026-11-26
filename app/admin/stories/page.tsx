@@ -6,7 +6,7 @@ import { AdminNav } from "@/components/admin-nav";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-export default async function StoriesPage({ searchParams }: { searchParams: Promise<{ saved?: string; updated?: string; generated?: string; error?: string; scan?: string; checked?: string; fetched?: string; imported?: string; duplicates?: string; ai?: string; errors?: string; extracted?: string; drafts?: string; draftErrors?: string }> }) {
+export default async function StoriesPage({ searchParams }: { searchParams: Promise<{ saved?: string; updated?: string; generated?: string; error?: string; scan?: string; checked?: string; fetched?: string; imported?: string; duplicates?: string; ai?: string; aiError?: string; errors?: string; extracted?: string; drafts?: string; draftErrors?: string }> }) {
   const params = await searchParams;
   const sql = getSql();
   const [desks, stories] = await Promise.all([
@@ -25,7 +25,8 @@ export default async function StoriesPage({ searchParams }: { searchParams: Prom
           <form action={runSourceDiscovery}><button className="admin-primary" type="submit">Run source scan →</button></form>
         </div>
         {params.scan && <p className="admin-success">Scan complete: {params.checked || "0"} feeds checked, {params.fetched || "0"} entries fetched, {params.imported || "0"} new stories added, {params.duplicates || "0"} duplicates matched. Full article text extracted: {params.extracted || "0"}. AI drafts created: {params.drafts || "0"}. Draft errors: {params.draftErrors || "0"}. AI screening: {params.ai === "on" ? "enabled" : "not active"}. Feed errors: {params.errors || "0"}.</p>}
-        {params.ai === "off" && params.scan && <p className="discovery-note">RSS ingestion ran, but AI screening was not active. Add OPENAI_API_KEY in Vercel environment variables to enable story selection and desk scoring.</p>}
+        {params.ai === "off" && params.scan && <p className="discovery-note">RSS ingestion ran without AI screening. Add GEMINI_API_KEY in Vercel environment variables to enable story selection and desk scoring.</p>}
+        {params.ai === "error" && params.scan && <p className="admin-error">AI screening failed. No new stories were imported during this scan, to avoid bypassing editorial screening. {params.aiError || "Check the Gemini API key, model access and quota, then retry."}</p>}
         <p className="discovery-note">Only active sources with an HTTPS feed URL are scanned. Add feed URLs in <a href="/admin/sources">Source Register</a>.</p>
       </section>
       <div className="admin-two-col">
