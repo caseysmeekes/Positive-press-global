@@ -28,8 +28,8 @@ async function testModel(ai: InstanceType<typeof import("@google/genai").GoogleG
 
 export async function runGeminiDiagnostics() {
   const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-  const primary = process.env.GEMINI_MODEL || "gemini-3.8-flash";
-  const fallback = process.env.GEMINI_FALLBACK_MODEL || "gemini-3.5-flash-lite";
+  const primary = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
+  const fallback = process.env.GEMINI_FALLBACK_MODEL || "gemini-3.8-flash";
 
   if (!key) redirect("/admin/stories?geminiDiag=missing_key");
 
