@@ -28,8 +28,9 @@ async function testModel(ai: InstanceType<typeof import("@google/genai").GoogleG
 
 export async function runGeminiDiagnostics() {
   const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-  const primary = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
-  const fallback = process.env.GEMINI_FALLBACK_MODEL || "gemini-3.8-flash";
+  const { GEMINI_PRIMARY_MODEL, GEMINI_FALLBACK_MODEL } = await import("@/lib/gemini");
+  const primary = GEMINI_PRIMARY_MODEL;
+  const fallback = GEMINI_FALLBACK_MODEL;
 
   if (!key) redirect("/admin/stories?geminiDiag=missing_key");
 
@@ -57,6 +58,7 @@ export async function runGeminiDiagnostics() {
 
   const summary = {
     primary, fallback,
+    modelSource: "application defaults (Vercel model overrides are intentionally ignored)",
     modelsList: listError ? "error" : "success",
     listError,
     modelCount: modelNames.length,
