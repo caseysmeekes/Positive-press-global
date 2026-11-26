@@ -1,5 +1,8 @@
 import { GoogleGenAI } from "@google/genai";
 
+export const GEMINI_PRIMARY_MODEL = "gemini-3.5-flash-lite";
+export const GEMINI_FALLBACK_MODEL = "gemini-3.8-flash";
+
 type JsonGenerationOptions = {
   systemInstruction: string;
   prompt: string;
@@ -66,8 +69,8 @@ export async function generateGeminiJson<T>(options: JsonGenerationOptions): Pro
     throw new Error("Gemini is not configured. Add GEMINI_API_KEY to the Vercel environment variables, then redeploy.");
   }
 
-  const primaryModel = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
-  const fallbackModel = process.env.GEMINI_FALLBACK_MODEL || "gemini-3.8-flash";
+  const primaryModel = GEMINI_PRIMARY_MODEL;
+  const fallbackModel = GEMINI_FALLBACK_MODEL;
   const ai = new GoogleGenAI({ apiKey });
 
   try {
