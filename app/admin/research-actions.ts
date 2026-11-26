@@ -20,10 +20,9 @@ export async function researchAndDraftStory(data: FormData) {
   const story = rows[0] as {id:string;headline:string;summary:string|null;canonical_url:string|null;desk_id:string|null;desk_name:string|null};
   if (!story.desk_id) redirect("/admin/stories?error=assign_desk");
 
-  // Prevent repeated clicks/retries from creating duplicate AI drafts for one story.
-  const existingDrafts = await sql`select id from articles where story_id=${storyId} order by updated_at desc limit 1`;
-  if (existingDrafts.length) redirect("/admin/articles?existing=1");
-
+  // Re-running research updates the latest draft for this story rather than creating duplicates.
+  const existingDrafts = await sql`select id from articles where story_id=${storyId} and status='draft' order by updated_at desc limit 1`;
+  const existingArticleId = existingDrafts.length ? (existingDrafts[0] as {id:string}).id : null;
   const sources = await sql`select url,title,publisher,source_role,notes from story_sources where story_id=${storyId} order by created_at asc limit 8`;
   const sourceMaterial = (sources as {url:string;title:string|null;publisher:string|null;source_role:string;notes:string|null}[]).map(s => ({
     url:s.url, title:s.title, publisher:s.publisher, role:s.source_role, editorial_notes:s.notes
@@ -63,26 +62,27 @@ export async function researchAndDraftStory(data: FormData) {
       "Source assessment: "+(draft.source_assessment || "Not provided."),
       "Supplied source links: "+sourceMaterial.map(s=>s.publisher+": "+s.url).join(" | ")
     ].join("\n");
-    const articleBody = draft.article_markdown + "\n\n## Sources supplied\n" +
-      sourceMaterial.map(s=>"- ["+(s.publisher || s.title || "Source")+"]("+s.url+")").join("\n") +
-      "\n\n*AI-assisted working draft. Claims, facts, source quality, image rights and quotations require human review. This draft has not been independently fact-checked.*";
+    const articleBody = draft.article_markdown.trim();
     const slugBase = draft.headline.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,70) || "article";
     const slug = slugBase+"-"+crypto.randomUUID().slice(0,8);
-    const created = await sql`with a as (
-      insert into articles (story_id,desk_id,title,slug,standfirst,body_markdown,seo_description,article_type,status,is_ai_assisted,human_review_required)
-      values (${storyId},${story.desk_id},${draft.headline.slice(0,180)},${slug},${(draft.standfirst || "").slice(0,400)},${articleBody},${(draft.seo_description || "").slice(0,300)},'feature','draft',true,true)
-      returning id,title,standfirst,body_markdown
-    )
-    insert into article_versions (article_id,version_number,title,standfirst,body_markdown,change_summary)
-    select id,1,title,standfirst,body_markdown,'AI-assisted first draft and research pack' from a returning article_id`;
+    let articleId: string;
+    if (existingArticleId) {
+      const updated = await sql`update articles set title=${draft.headline.slice(0,180)}, standfirst=${(draft.standfirst || "").slice(0,400)}, body_markdown=${articleBody}, seo_description=${(draft.seo_description || "").slice(0,300)}, is_ai_assisted=true, human_review_required=true, updated_at=now() where id=${existingArticleId} returning id`;
+      if (!updated.length) throw new Error("The existing draft could not be updated.");
+      articleId = (updated[0] as {id:string}).id;
+    } else {
+      const created = await sql`insert into articles (story_id,desk_id,title,slug,standfirst,body_markdown,seo_description,article_type,status,is_ai_assisted,human_review_required) values (${storyId},${story.desk_id},${draft.headline.slice(0,180)},${slug},${(draft.standfirst || "").slice(0,400)},${articleBody},${(draft.seo_description || "").slice(0,300)},'feature','draft',true,true) returning id`;
+      articleId = (created[0] as {id:string}).id;
+    }
+    await sql`insert into article_versions (article_id,version_number,title,standfirst,body_markdown,change_summary) select ${articleId},coalesce(max(version_number),0)+1,${draft.headline.slice(0,180)},${(draft.standfirst || "").slice(0,400)},${articleBody},${existingArticleId ? "AI-assisted editorial redraft" : "AI-assisted first draft"} from article_versions where article_id=${articleId}`;
     await sql`update discovered_stories set status='drafted',internal_notes=concat_ws(E'\\n\\n',internal_notes,${pack}::text) where id=${storyId}`;
     await sql`update workflow_runs set status='succeeded',completed_at=now(),items_processed=1,
-      metadata=jsonb_build_object('story_id',${storyId}::text,'article_id',${(created[0] as {article_id:string}).article_id}::text,'source_count',${sourceMaterial.length}::int)
+      metadata=jsonb_build_object('story_id',${storyId}::text,'article_id',${articleId}::text,'source_count',${sourceMaterial.length}::int)
       where id=${(run[0] as {id:string}).id}`;
     await sql`insert into workflow_runs (workflow_type,status,started_at,completed_at,items_processed,metadata)
-      values ('drafting','succeeded',now(),now(),1,jsonb_build_object('story_id',${storyId}::text,'article_id',${(created[0] as {article_id:string}).article_id}::text))`;
+      values ('drafting','succeeded',now(),now(),1,jsonb_build_object('story_id',${storyId}::text,'article_id',${articleId}::text))`;
     await sql`insert into editorial_audit_log (entity_type,entity_id,action,details)
-      values ('story',${storyId},'ai_research_and_draft_created',jsonb_build_object('article_id',${(created[0] as {article_id:string}).article_id}))`;
+      values ('story',${storyId},'ai_research_and_draft_created',jsonb_build_object('article_id',${articleId}))`;
     revalidatePath("/admin");
     revalidatePath("/admin/stories");
     revalidatePath("/admin/articles");
