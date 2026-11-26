@@ -48,7 +48,7 @@ export async function generateGeminiJson<T>(options: JsonGenerationOptions): Pro
       if (attempt === 3 || !RETRYABLE_ERROR.test(message)) {
         throw new Error("Gemini request failed (" + model + "): " + message);
       }
-      await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+      await new Promise(resolve => setTimeout(resolve, 1500 * (2 ** (attempt - 1))));
     }
   }
 
