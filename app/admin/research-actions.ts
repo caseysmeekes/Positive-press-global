@@ -83,7 +83,11 @@ export async function researchAndDraftStory(data: FormData) {
     redirect("/admin/articles?generated=1");
   } catch (error) {
     if (error && typeof error === "object" && "digest" in error && String((error as {digest?:unknown}).digest).startsWith("NEXT_REDIRECT")) throw error;
-    await sql`update workflow_runs set status='failed',completed_at=now(),error_message=${error instanceof Error ? error.message : "Research and drafting failed"} where id=${(run[0] as {id:string}).id}`;
-    throw error;
+    const message = error instanceof Error ? error.message : "Research and drafting failed";
+    await sql`update workflow_runs set status='failed',completed_at=now(),error_message=${message} where id=${(run[0] as {id:string}).id}`;
+    const transient = /503|UNAVAILABLE|high demand|429|rate.?limit|temporar|overloaded|timeout/i.test(message);
+    redirect(transient
+      ? "/admin/stories?error=gemini_temporarily_unavailable"
+      : "/admin/stories?error=research_failed");
   }
 }
